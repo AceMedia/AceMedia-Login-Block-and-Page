@@ -3,8 +3,8 @@ import { registerBlockType } from '@wordpress/blocks';
 import { TextControl, ToggleControl, PanelBody } from '@wordpress/components';
 import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
 
-registerBlockType('ace/password-block', {
-    title: __('Password Block', 'login-block'),
+registerBlockType('acemedia/password-block', {
+    title: __('Password Block', 'acemedia-login-block'),
     category: 'common',
     attributes: {
         showPassword: {
@@ -13,7 +13,7 @@ registerBlockType('ace/password-block', {
         },
         placeholder: {
             type: 'string',
-            default: __('Password', 'login-block'),
+            default: __('Password', 'acemedia-login-block'),
         }
     },
     edit: ({ attributes, setAttributes }) => {
@@ -22,14 +22,14 @@ registerBlockType('ace/password-block', {
         return (
             <div {...useBlockProps()}>
                 <InspectorControls>
-                    <PanelBody title={__('Password Block Settings', 'login-block')}>
+                    <PanelBody title={__('Password Block Settings', 'acemedia-login-block')}>
                         <ToggleControl
-                            label={__('Allow users to show password', 'login-block')}
+                            label={__('Allow users to show password', 'acemedia-login-block')}
                             checked={showPassword}
                             onChange={(value) => setAttributes({ showPassword: value })}
                         />
                         <TextControl
-                            label={__('Placeholder', 'login-block')}
+                            label={__('Placeholder', 'acemedia-login-block')}
                             value={placeholder}
                             onChange={(value) => setAttributes({ placeholder: value })}
                         />
@@ -45,7 +45,7 @@ registerBlockType('ace/password-block', {
                     <span
                         style={{ cursor: 'pointer', fontSize: '0.8em', display: 'block', marginTop: '0.5em' }}
                         onClick={() => setAttributes({ showPassword: !showPassword })}
-                    >{showPassword ? __('Hide Password', 'login-block') : __('Show Password', 'login-block')}</span>
+                    >{showPassword ? __('Hide Password', 'acemedia-login-block') : __('Show Password', 'acemedia-login-block')}</span>
                 )}
             </div>
         );

@@ -3,17 +3,17 @@ import { registerBlockType } from '@wordpress/blocks';
 import { TextControl, PanelBody } from '@wordpress/components';
 import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
 
-registerBlockType("ace/username-block", {
-    title: __("Username Block", "login-block"),
+registerBlockType("acemedia/username-block", {
+    title: __("Username Block", "acemedia-login-block"),
     category: "common",
     attributes: {
         label: {
             type: "string",
-            default: __("Username", "login-block")
+            default: __("Username", "acemedia-login-block")
         },
         placeholder: {
             type: "string",
-            default: __("Username", "login-block")
+            default: __("Username", "acemedia-login-block")
         }
     },
     edit: function (props) {
@@ -23,9 +23,9 @@ registerBlockType("ace/username-block", {
         return (
             <div {...useBlockProps()}>
                 <InspectorControls>
-                    <PanelBody title={__("Username Block Settings", "login-block")}>
+                    <PanelBody title={__("Username Block Settings", "acemedia-login-block")}>
                         <TextControl
-                            label={__("Placeholder", "login-block")}
+                            label={__("Placeholder", "acemedia-login-block")}
                             value={placeholder}
                             onChange={(value) => setAttributes({ placeholder: value })}
                         />

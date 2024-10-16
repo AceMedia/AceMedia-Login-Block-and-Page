@@ -3,13 +3,13 @@ import { registerBlockType } from '@wordpress/blocks';
 import { CheckboxControl } from '@wordpress/components';
 import { useBlockProps } from '@wordpress/block-editor';
 
-registerBlockType('ace/remember-me-block', {
-    title: __('Remember Me Block', 'login-block'),
+registerBlockType('acemedia/remember-me-block', {
+    title: __('Remember Me Block', 'acemedia-login-block'),
     category: 'common',
     attributes: {
         label: {
             type: 'string',
-            default: __('Remember Me', 'login-block'),
+            default: __('Remember Me', 'acemedia-login-block'),
         },
         checked: {
             type: 'boolean',

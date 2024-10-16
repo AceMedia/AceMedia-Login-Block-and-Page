@@ -27,7 +27,7 @@ Ace Login Block provides a seamless way to craft unique, branded login experienc
 
 This section describes how to install the plugin and get it working.
 
-1. Upload the plugin files to the `/wp-content/plugins/ace-login-block` directory, or install the plugin through the WordPress plugin screen directly.
+1. Upload the plugin files to the `/wp-content/plugins/acemedia-login-block` directory, or install the plugin through the WordPress plugin screen directly.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
 3. Navigate to the "Ace Login Block" settings and select the page to use for your custom login page.
 
@@ -54,7 +54,7 @@ If you disable Ace Login Block, WordPress will revert to the default `wp-login.p
 = 0.423 =
 Release Date: 2024-10-12
 * New Feature: Implemented dynamic login redirects based on user roles, allowing specific redirect URLs for each role within the settings.
-* Enhancement: Updated ace-login-block.php to handle dynamic redirects, ensuring users are sent to the appropriate page after logging in based on their role.
+* Enhancement: Updated acemedia-login-block.php to handle dynamic redirects, ensuring users are sent to the appropriate page after logging in based on their role.
 * Enhancement: Modified package-lock.json and package.json to include new dependencies required for the updated functionality.
 * Enhancement: Enhanced src/block.json to support role-based page listings, making it easier to manage page options for each role.
 * Enhancement: Updated src/login-block.js to dynamically list available pages per role, improving the settings interface for selecting redirect URLs.
