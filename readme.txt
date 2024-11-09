@@ -88,6 +88,11 @@ Release Date: 2024-10-11 (Pre-Release)
     - Debugging: Debug messages included to assist with development.
 * Important Note: Known issues with form redirection in this version, recommended to use v0.421 for better performance.
 
+== Source ==
+
+The source code for this plugin, including unminified JavaScript and CSS, is available on GitHub:  
+[GitHub Repository](https://github.com/AceMedia/AceMedia-Login-Block-and-Page)
+
 == License ==
 
 This plugin is licensed under the GPLv2 (or later) as it is required to follow WordPress.org repository rules.
