@@ -1,7 +1,7 @@
 /**
  * WordPress dependencies
  */
-import { _ } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useBlockProps, InnerBlocks } from '@wordpress/block-editor';
 import { TextControl, PanelBody } from '@wordpress/components';
 import { InspectorControls } from '@wordpress/block-editor';
@@ -11,17 +11,17 @@ import { registerBlockType } from '@wordpress/blocks';
  * Block metadata
  */
 registerBlockType('acemedia/login-block', {
-    title: _('Login Block', 'acemedia-login-block'),
+    title: __('Login Block', 'acemedia-login-block'),
     icon: 'lock',
     category: 'common',
     attributes: {
         labelRemember: {
             type: 'string',
-            default: _('Remember Me', 'acemedia-login-block'),
+            default: __('Remember Me', 'acemedia-login-block'),
         },
         labelLogIn: {
             type: 'string',
-            default: _('Log In', 'acemedia-login-block'),
+            default: __('Log In', 'acemedia-login-block'),
         },
     },
 
@@ -32,7 +32,7 @@ registerBlockType('acemedia/login-block', {
         const TEMPLATE = [
             ['core/columns', { style: { spacing: { margin: '0px' } } }, [
                 ['core/column', {}, [
-                    ['core/paragraph', { content: _('<label for="log"><strong>Username:</strong></label>', 'acemedia-login-block'), align: 'right' }],
+                    ['core/paragraph', { content: __('<label for="log"><strong>Username:</strong></label>', 'acemedia-login-block'), align: 'right' }],
                 ]],
                 ['core/column', {}, [
                     ['acemedia/username-block'],
@@ -40,7 +40,7 @@ registerBlockType('acemedia/login-block', {
             ]],
             ['core/columns', { style: { spacing: { margin: '0px' } } }, [
                 ['core/column', {}, [
-                    ['core/paragraph', { content: _('<label for="pwd"><strong>Password:</strong></label>', 'acemedia-login-block'), align: 'right' }],
+                    ['core/paragraph', { content: __('<label for="pwd"><strong>Password:</strong></label>', 'acemedia-login-block'), align: 'right' }],
                 ]],
                 ['core/column', {}, [
                     ['acemedia/password-block'],
@@ -64,7 +64,7 @@ registerBlockType('acemedia/login-block', {
         return (
             <div {...useBlockProps()}>
                 <InspectorControls>
-                    <PanelBody title={_('Login Form Settings', 'acemedia-login-block')}>
+                    <PanelBody title={__('Login Form Settings', 'acemedia-login-block')}>
                         {/* Removed the TextControl for redirect URL */}
                     </PanelBody>
                 </InspectorControls>

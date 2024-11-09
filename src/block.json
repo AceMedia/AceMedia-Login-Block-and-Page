@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
-	"name": "create-block/acemedia-login-block",
+	"name": "create-block/ace-login-block",
 	"version": "0.423.0",
 	"title": "Ace Login Block",
 	"category": "widgets",
@@ -11,7 +11,7 @@
 	"supports": {
 		"html": false
 	},
-	"textdomain": "acemedia-login-block",
+	"textdomain": "ace-login-block",
 	"editorScript": "file:./login-block.js",
 	"script": "file:./ace-login-toggle.js",
 	"editorStyle": "file:./login-block.css",

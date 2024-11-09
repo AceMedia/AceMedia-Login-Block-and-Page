@@ -7,7 +7,7 @@ module.exports = {
         'username-block': './src/username-block.js',
         'password-block': './src/password-block.js',
         'remember-me-block': './src/remember-me-block.js',
-        'login-toggle': './src/login-toggle.js',
+        'acemedia-login': './src/ace-login.js',
     },
     output: {
         path: path.resolve(__dirname, 'build'),

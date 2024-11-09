@@ -275,33 +275,25 @@ add_action( 'login_init', 'acemedia_login_block_load_custom_page_template' );
 /**
  * Enqueue styles and scripts for the custom login page.
  */
-function acemedia_login_block_login_enqueue_assets() {
-    // Ensure scripts are using the WordPress Address (URL)
-    $wp_address = get_bloginfo('wpurl');
-    /*
-        wp_enqueue_style(
-            'acemedia-login-block-style',
-            $wp_address . '/wp-content/plugins/acemedia-login-block/build/login-block.css',
+function acemedia_enqueue_login_script() {
+    // Check if we're on a singular page or post and if the block is in the content.
+    if ( has_block( 'acemedia/login-block' ) ) {
+        wp_enqueue_script(
+            'acemedia-login-frontend',
+            plugin_dir_url( __FILE__ ) . 'build/ace-login.js',
             array(),
-            filemtime( plugin_dir_path( __FILE__ ) . 'build/login-block.css' )
+            filemtime( plugin_dir_path( __FILE__ ) . 'build/ace-login.js' ),
+            true
         );
-    */
 
-    wp_enqueue_script(
-        'acemedia-login-block-js',
-        plugin_dir_url( __FILE__ ) . 'build/login-toggle.js',
-        array( 'wp-blocks', 'wp-element', 'wp-editor' ),
-        filemtime( plugin_dir_url( __FILE__ ) . 'build/login-toggle.js' ),
-        true
-    );
-
-    // Localize script to pass the site URL and nonce to JavaScript
-    wp_localize_script('acemedia-login-block-js', 'aceLoginBlock', array(
-        'loginUrl' => site_url('wp-login.php'),
-        'redirectUrl' => site_url('/wp-admin')
-    ));
+        // Localize the script to pass any necessary data
+        wp_localize_script( 'acemedia-login-frontend', 'aceLoginBlock', array(
+            'loginUrl' => site_url( 'wp-login.php' ),
+            'redirectUrl' => site_url( '/wp-admin' ),
+        ));
+    }
 }
-add_action( 'wp_enqueue_scripts', 'acemedia_login_block_login_enqueue_assets' );
+add_action( 'wp_enqueue_scripts', 'acemedia_enqueue_login_script' );
 
 
 // Handle the login redirect after a user logs in
@@ -372,7 +364,7 @@ add_filter( 'login_title', 'acemedia_login_block_login_title' );
  */
 function acemedia_login_block_enqueue_assets() {
     wp_enqueue_script(
-        'ace-login-toggle',
+        'acemedia-login-toggle',
         plugin_dir_url( __FILE__ ) . 'build/login-toggle.js',
         array(),
         '1.0.0',
@@ -395,7 +387,7 @@ function acemedia_login_block_enqueue_assets() {
     ));
 
     wp_enqueue_script(
-        'ace-username-block-editor',
+        'acemedia-username-block-editor',
         plugin_dir_url( __FILE__ ) . 'build/username-block.js',
         array( 'wp-blocks', 'wp-element', 'wp-editor' ),
         filemtime( plugin_dir_path( __FILE__ ) . 'build/username-block.js' ),
@@ -403,7 +395,7 @@ function acemedia_login_block_enqueue_assets() {
     );
 
     wp_enqueue_script(
-        'ace-password-block-editor',
+        'acemedia-password-block-editor',
         plugin_dir_url( __FILE__ ) . 'build/password-block.js',
         array( 'wp-blocks', 'wp-element', 'wp-editor' ),
         filemtime( plugin_dir_path( __FILE__ ) . 'build/password-block.js' ),
@@ -411,7 +403,7 @@ function acemedia_login_block_enqueue_assets() {
     );
 
     wp_enqueue_script(
-        'ace-remember-me-block-editor',
+        'acemedia-remember-me-block-editor',
         plugin_dir_url( __FILE__ ) . 'build/remember-me-block.js',
         array( 'wp-blocks', 'wp-element', 'wp-editor' ),
         filemtime( plugin_dir_path( __FILE__ ) . 'build/remember-me-block.js' ),
