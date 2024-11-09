@@ -96,3 +96,28 @@ If you disable Ace Login Block, WordPress will revert to the default `wp-login.p
 ## Advanced Use
 
 Ace Login Block is perfect for developers and site owners looking to create unique, branded login experiences. By leveraging the block editor, you can design your login page however you see fit, from adding custom fields to embedding brand logos or messages. The plugin ensures that login functionality remains intact while offering flexibility over the appearance and content of the login page.
+
+
+## Development Setup
+
+To set up a development environment for the plugin, ensure that you have [Node.js](https://nodejs.org) installed and then run the following commands:
+
+```bash
+# Install dependencies
+npm install
+
+# Build the plugin for production
+npm run build
+
+# Watch for file changes in development
+npm run dev
+
+# Run linter to check for code issues
+npm run lint
+
+# Format code automatically
+npm run format
+
+# Create a zip file for deployment
+npm run zip
+```
