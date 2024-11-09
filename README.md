@@ -23,6 +23,14 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 
 Ace Login Block provides a seamless way to craft unique, branded login experiences while ensuring compatibility with WordPress’s login handling.
 
+## Source Code
+
+The source code for this plugin, including uncompressed JavaScript and CSS files, is available on GitHub. You can find it here:
+
+**GitHub Repository:** [Ace Login Block on GitHub](https://github.com/AceMedia/AceMedia-Login-Block-and-Page)
+
+We use npm and webpack to compile assets for production. To contribute, please fork the repository, make changes, and submit a pull request.
+
 ## Installation
 
 This section describes how to install the plugin and get it working.
