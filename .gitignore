@@ -13,7 +13,7 @@ build/Release
 
 # Ignore build folder
 build/
-
+svn/
 # Dependency directories
 node_modules/
 
@@ -32,4 +32,4 @@ node_modules/
 # dotenv environment variables file
 .env
 
-*.swp
+*.swp.svn
