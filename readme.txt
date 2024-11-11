@@ -3,7 +3,7 @@ Contributors: shanerounce
 Tags: login, block, custom login, WordPress, Gutenberg  
 Requires at least: 6.3 
 Tested up to: 6.7
-Stable tag: 0.423.0  
+Stable tag: 0.424.0  
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 

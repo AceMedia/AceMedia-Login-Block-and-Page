@@ -5,7 +5,7 @@
  * Requires at least: 6.6
  * Tested up to:      6.7
  * Requires PHP:      7.2
- * Version:           0.423.0
+ * Version:           0.424.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
