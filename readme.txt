@@ -51,6 +51,11 @@ If you disable Ace Login Block, WordPress will revert to the default `wp-login.p
 
 == Changelog ==
 
+= 0.424.0 =
+Release Date: 2024-11-11
+* Ensures login block functionality is only active when a custom login page override is set.
+* Prevents interference with the default WordPress login process when no override page is configured.
+
 = 0.423 =
 Release Date: 2024-10-12
 * New Feature: Implemented dynamic login redirects based on user roles, allowing specific redirect URLs for each role within the settings.
