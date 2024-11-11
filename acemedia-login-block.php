@@ -300,17 +300,21 @@ add_action( 'wp_enqueue_scripts', 'acemedia_enqueue_login_script' );
 
 
 // Handle the login redirect after a user logs in
-add_action('wp_login', 'acemedia_login_redirect', 10, 2);
 function acemedia_login_redirect($user_login, $user) {
-    // Initialize the redirect URL with the default redirect if set
-    if ( isset( $_POST['login_nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['login_nonce'] ) ), 'login_action' ) ) {
-        // The nonce is valid, process the form data
-        $redirect_url = isset( $_POST['redirect_to'] ) ? esc_url( sanitize_text_field( wp_unslash( $_POST['redirect_to'] ) ) ) : admin_url();
-    } else {
-        // The nonce check failed, handle the error
-        wp_die( esc_html__( 'Security check failed.', 'acemedia-login-block' ) );
+    $custom_page_id = get_option('acemedia_login_block_custom_page', 0);
+    if (!$custom_page_id) {
+        // Custom login page not set, do nothing
+        return;
     }
 
+    // Initialize the redirect URL with the default redirect if set
+    if (isset($_POST['login_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['login_nonce'])), 'login_action')) {
+        // The nonce is valid, process the form data
+        $redirect_url = isset($_POST['redirect_to']) ? esc_url(sanitize_text_field(wp_unslash($_POST['redirect_to']))) : admin_url();
+    } else {
+        // The nonce check failed, handle the error
+        wp_die(esc_html__('Security check failed.', 'acemedia-login-block'));
+    }
 
     // Check for role-specific redirects
     foreach ($user->roles as $role) {
@@ -328,18 +332,31 @@ function acemedia_login_redirect($user_login, $user) {
     wp_safe_redirect($redirect_url);
     exit(); // Exit to ensure no further processing occurs
 }
+add_action('wp_login', 'acemedia_login_redirect', 10, 2);
 
 
 
-add_action('wp_logout', 'acemedia_logout_redirect');
+// Adjust the logout redirect function
 function acemedia_logout_redirect() {
+    $custom_page_id = get_option('acemedia_login_block_custom_page', 0);
+    if (!$custom_page_id) {
+        // Custom login page not set, do nothing
+        return;
+    }
+
     $redirect_url = home_url(); // Change this to your desired logout redirect URL
     wp_safe_redirect($redirect_url);
     exit();
 }
+add_action('wp_logout', 'acemedia_logout_redirect');
 
-add_action('init', 'acemedia_handle_logout');
 function acemedia_handle_logout() {
+    $custom_page_id = get_option('acemedia_login_block_custom_page', 0);
+    if (!$custom_page_id) {
+        // Custom login page not set, do nothing
+        return;
+    }
+
     if (isset($_GET['action']) && $_GET['action'] === 'logout') {
         // Verify the nonce
         if (isset($_GET['_wpnonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'log-out')) {
@@ -353,6 +370,7 @@ function acemedia_handle_logout() {
         }
     }
 }
+add_action('init', 'acemedia_handle_logout');
 
 /**
  * Customize the login page title.

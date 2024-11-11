@@ -11,7 +11,7 @@
 		"lint:css": "wp-scripts lint-style",
 		"lint:js": "wp-scripts lint-js",
 		"packages-update": "wp-scripts packages-update",
-		"plugin-zip": "wp-scripts plugin-zip",
+		"plugin-zip": "zip -r ace-login-block.zip * -x '*.git*' 'node_modules/*' '*.DS_Store' '*.zip' 'src/*' 'src'",
 		"start": "wp-scripts start"
 	},
 	"devDependencies": {
