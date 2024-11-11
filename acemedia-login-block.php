@@ -5,7 +5,7 @@
  * Requires at least: 6.6
  * Tested up to:      6.7
  * Requires PHP:      7.2
- * Version:           0.424.0
+ * Version:           0.425.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -301,38 +301,27 @@ add_action( 'wp_enqueue_scripts', 'acemedia_enqueue_login_script' );
 
 // Handle the login redirect after a user logs in
 function acemedia_login_redirect($user_login, $user) {
-    $custom_page_id = get_option('acemedia_login_block_custom_page', 0);
-    if (!$custom_page_id) {
-        // Custom login page not set, do nothing
-        return;
-    }
-
-    // Initialize the redirect URL with the default redirect if set
-    if (isset($_POST['login_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['login_nonce'])), 'login_action')) {
-        // The nonce is valid, process the form data
-        $redirect_url = isset($_POST['redirect_to']) ? esc_url(sanitize_text_field(wp_unslash($_POST['redirect_to']))) : admin_url();
-    } else {
-        // The nonce check failed, handle the error
-        wp_die(esc_html__('Security check failed.', 'acemedia-login-block'));
-    }
+    // Default redirect URL if none is specified for the user’s role
+    $redirect_url = isset($_POST['redirect_to']) ? esc_url(sanitize_text_field(wp_unslash($_POST['redirect_to']))) : admin_url();
 
     // Check for role-specific redirects
     foreach ($user->roles as $role) {
-        $role_redirect_key = "acemedia_login_block_redirect_{$role}"; // Adjust the option key
+        $role_redirect_key = "acemedia_login_block_redirect_{$role}"; // Option key for the redirect URL
         $role_redirect_url = get_option($role_redirect_key);
 
-        // If a role-specific redirect URL is found, use it
+        // If a role-specific redirect URL is found, set it as the redirect URL
         if (!empty($role_redirect_url)) {
-            $redirect_url = esc_url($role_redirect_url); // Use the full URL directly
-            break; // Break after finding the first applicable redirect
+            $redirect_url = esc_url($role_redirect_url);
+            break; // Stop after the first matching role redirect
         }
     }
 
     // Perform the redirect
     wp_safe_redirect($redirect_url);
-    exit(); // Exit to ensure no further processing occurs
+    exit;
 }
 add_action('wp_login', 'acemedia_login_redirect', 10, 2);
+
 
 
 

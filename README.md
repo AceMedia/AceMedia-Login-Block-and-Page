@@ -4,7 +4,7 @@
 **Tags:** login, block, custom login, WordPress, Gutenberg, security  
 **Requires at least:** 6.3 
 **Tested up to:** 6.7  
-**Stable tag:** 0.424.0  
+**Stable tag:** 0.425.0  
 **License:** GPLv2 or later  
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -64,7 +64,7 @@ If you disable Ace Login Block, WordPress will revert to the default `wp-login.p
 
 ## Changelog
 
-### 0.424.0
+### 0.425.0
 **Release Date:** 2024-11-11
 - Ensures login block functionality is only active when a custom login page override is set.
 - Prevents interference with the default WordPress login process when no override page is configured.
