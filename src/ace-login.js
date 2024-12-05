@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Handle login button click
-    const loginButton = document.querySelector('.wp-block-button__link');
+    const loginButton = document.querySelector('.wp-block-acemedia-login-block form .wp-block-button__link');
     if (loginButton) {
         loginButton.addEventListener('click', function(event) {
             event.preventDefault();
