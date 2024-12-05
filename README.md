@@ -64,6 +64,10 @@ If you disable Ace Login Block, WordPress will revert to the default `wp-login.p
 
 ## Changelog
 
+### 0.426.0
+**Release Date:** 2024-12-05
+- Fixed the selector for the form submission button.
+
 ### 0.425.0
 **Release Date:** 2024-11-11
 - Allows users to be redirected based on role-specific settings, even if no custom login page is set.
