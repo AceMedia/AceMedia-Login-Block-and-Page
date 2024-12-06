@@ -16,6 +16,7 @@ build/
 svn/
 # Dependency directories
 node_modules/
+vendor/
 
 # Optional npm cache directory
 .npm
@@ -33,3 +34,10 @@ node_modules/
 .env
 
 *.swp.svn
+
+
+# Exclude all files in qrcodes/
+qrcodes/*
+
+# But include the qrcodes/ directory itself
+!qrcodes/
