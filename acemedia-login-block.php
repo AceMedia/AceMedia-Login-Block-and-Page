@@ -283,9 +283,9 @@ function acemedia_enqueue_login_script() {
     if ( has_block( 'acemedia/login-block' ) ) {
         wp_enqueue_script(
             'acemedia-login-frontend',
-            plugin_dir_url( __FILE__ ) . 'build/ace-login.js',
+            plugin_dir_url( __FILE__ ) . 'build/acemedia-login.js',
             array(),
-            filemtime( plugin_dir_path( __FILE__ ) . 'build/ace-login.js' ),
+            filemtime( plugin_dir_path( __FILE__ ) . 'build/acemedia-login.js' ),
             true
         );
 
