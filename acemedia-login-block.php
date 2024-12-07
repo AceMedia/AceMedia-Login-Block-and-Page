@@ -668,26 +668,36 @@ function acemedia_generate_qr_code($user_id) {
     // Generate or retrieve a Base32-encoded secret
     $secret = get_user_meta($user_id, '_acemedia_2fa_secret', true);
     if (!$secret) {
-        // Generate a random secret that's compatible with Google Authenticator
-        $random_bytes = random_bytes(16);
-        $secret = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', base32_encode($random_bytes)), 0, 32));
+        // Define valid Base32 alphabet (A-Z and 2-7 only)
+        $base32_alphabet = str_split('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567');
+        $secret = '';
+        
+        // Generate exactly 32 characters from valid Base32 alphabet
+        for ($i = 0; $i < 32; $i++) {
+            $secret .= $base32_alphabet[array_rand($base32_alphabet)];
+        }
+        
         update_user_meta($user_id, '_acemedia_2fa_secret', $secret);
     }
 
-    // Ensure proper encoding of the issuer and username
-    $issuer = rawurlencode(get_bloginfo('name')); // Use site name instead of hardcoded value
-    $username = rawurlencode(get_userdata($user_id)->user_login);
-
-    // Construct the otpauth:// URI
+    // Get site and user info
+    $site_name = html_entity_decode(get_bloginfo('name'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $username = get_userdata($user_id)->user_login;
+    
+    // Create otpauth URI with proper encoding
     $uri = sprintf(
-        'otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30',
-        $issuer,
-        $username,
+        'otpauth://totp/%s:%s?secret=%s&issuer=%s',
+        rawurlencode($site_name),
+        rawurlencode($username),
         $secret,
-        $issuer
+        rawurlencode($site_name)
     );
 
-    // Create the QR code
+  
+    error_log('Raw secret: ' . $secret);
+    error_log('Generated TOTP URI: ' . $uri);
+
+    // Create QR code
     $qrCode = new QrCode(
         data: $uri,
         encoding: new Encoding('UTF-8'),
@@ -699,21 +709,18 @@ function acemedia_generate_qr_code($user_id) {
         backgroundColor: new Color(255, 255, 255)
     );
 
-    // Generate the QR code image
+    // Generate and save QR code
     $writer = new PngWriter();
     $result = $writer->write($qrCode);
-
-    // Ensure the directory exists for QR codes
-    $qr_code_dir = plugin_dir_path(__FILE__) . 'qrcodes/';
-    if (!file_exists($qr_code_dir)) {
-        mkdir($qr_code_dir, 0755, true);
-    }
-
+    
     // Save the QR code image
-    $qr_code_path = $qr_code_dir . $user_id . '.png';
-    $result->saveToFile($qr_code_path);
-
-    // Return the URL to the QR code image
+    $qrcodes_dir = plugin_dir_path(__FILE__) . 'qrcodes/';
+    if (!file_exists($qrcodes_dir)) {
+        mkdir($qrcodes_dir, 0755, true);
+    }
+    
+    $result->saveToFile($qrcodes_dir . $user_id . '.png');
+    
     return plugin_dir_url(__FILE__) . 'qrcodes/' . $user_id . '.png';
 }
 
