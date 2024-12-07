@@ -326,7 +326,7 @@ function acemedia_login_block_custom_page_field_html() {
     $pages = get_pages();
 
     echo '<select name="acemedia_login_block_custom_page">';
-    echo '<option value="">' . esc_html__( 'Select a page', 'acemedia-login-block' ) . '</option>';
+    echo '<option value="">' . esc_html__( 'Default WordPress Login', 'acemedia-login-block' ) . '</option>';
 
     foreach ( $pages as $page ) {
         $selected = selected( $custom_page_id, $page->ID, false );
@@ -900,6 +900,46 @@ add_action('rest_api_init', function () {
 });
 
 
+function acemedia_validate_2fa($user, $username, $password) {
+    if (!$user || is_wp_error($user)) {
+        return $user;
+    }
+
+    // Check if any of user's roles require 2FA
+    $needs_2fa = false;
+    foreach ($user->roles as $role) {
+        if (get_option("acemedia_2fa_enabled_{$role}", false)) {
+            $needs_2fa = true;
+            break;
+        }
+    }
+
+    if (!$needs_2fa) {
+        return $user;
+    }
+
+    // Check if 2FA code was provided
+    $two_factor_code = isset($_POST['2fa_code']) ? $_POST['2fa_code'] : '';
+    if (empty($two_factor_code)) {
+        return new WP_Error('2fa_required', __('Two-factor authentication code required.', 'acemedia-login-block'));
+    }
+
+    // Create a proper REST Request object
+    $request = new WP_REST_Request('POST', '/acemedia/v1/verify-2fa');
+    $request->set_param('code', $two_factor_code);
+    $request->set_param('username', $username);
+
+    // Verify the 2FA code
+    $verification_result = acemedia_verify_2fa_code($request);
+
+    if (is_wp_error($verification_result) || !$verification_result['success']) {
+        return new WP_Error('2fa_invalid', __('Invalid two-factor authentication code.', 'acemedia-login-block'));
+    }
+
+    return $user;
+}
+add_filter('authenticate', 'acemedia_validate_2fa', 99, 3);
+
 function acemedia_verify_2fa_code(WP_REST_Request $request) {
     $code = $request->get_param('code');
     $username = $request->get_param('username');
@@ -1437,4 +1477,237 @@ function acemedia_enforce_2fa_setup() {
     }
 }
 add_action('admin_init', 'acemedia_enforce_2fa_setup', 1);
+
+
+function is_login_page() {
+    return in_array($GLOBALS['pagenow'], ['wp-login.php', 'wp-register.php']);
+}
+
+function acemedia_enqueue_admin_login_script() {
+    if (has_block('acemedia/login-block') || is_login_page()) {
+        wp_enqueue_script(
+            'acemedia-login-frontend',
+            plugin_dir_url(__FILE__) . 'build/acemedia-login.js',
+            [],
+            filemtime(plugin_dir_path(__FILE__) . 'build/acemedia-login.js'),
+            true
+        );
+
+        // Fetch the current value of the 2FA setting
+        $is_2fa_enabled = (bool) get_option('acemedia_2fa_enabled', false);
+
+        wp_localize_script('acemedia-login-frontend', 'aceLoginBlock', [
+            'loginUrl' => site_url('wp-login.php'),
+            'userRoles' => wp_get_current_user()->roles,
+            'redirectUrl' => site_url('/wp-admin'),
+            'is2FAEnabled' => $is_2fa_enabled,
+            'twoFALabel' => __('Enter Authentication Code', 'acemedia-login-block'),
+            'twoFAPlaceholder' => __('Authentication Code', 'acemedia-login-block'),
+            'submit2FA' => __('Verify', 'acemedia-login-block'),
+            'verify2FAEndpoint' => rest_url('acemedia/v1/verify-2fa'),
+            'check2FAEndpoint' => rest_url('acemedia/v1/check-2fa'),
+            'nonce' => wp_create_nonce('wp_rest'),
+        ]);
+    }
+}
+add_action('login_enqueue_scripts', 'acemedia_enqueue_admin_login_script');
+
+
+
+
+
+
+function acemedia_add_2fa_to_login_form() {
+    ?>
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!aceLoginBlock.is2FAEnabled) {
+                return;
+            }
+
+            const loginButton = document.querySelector('#wp-submit');
+            if (loginButton) {
+                loginButton.addEventListener('click', handleLoginAttempt);
+            }
+
+            function handleLoginAttempt(event) {
+                event.preventDefault();
+                const form = event.target.closest('form');
+
+                if (form) {
+                    form.removeEventListener('submit', handleFormSubmit);
+                    form.addEventListener('submit', handleFormSubmit);
+
+                    const formInputs = {
+                        twoFactorState: createHiddenInput('two_factor_state', 'pending'),
+                        csrfToken: createHiddenInput('csrf_token', aceLoginBlock.csrfToken),
+                        twoFactorNonce: createHiddenInput('two_factor_nonce', ''),
+                        twoFactorVerified: createHiddenInput('two_factor_verified', 'false')
+                    };
+
+                    Object.values(formInputs).forEach(input => {
+                        if (!form.querySelector(`input[name="${input.name}"]`)) {
+                            form.appendChild(input);
+                        }
+                    });
+
+                    const usernameInput = form.querySelector('input[name="log"]');
+                    const username = usernameInput ? usernameInput.value : '';
+
+                    if (!username) {
+                        alert('Please enter your username.');
+                        return;
+                    }
+
+                    const sessionStart = Date.now();
+                    createHiddenInput('session_start', sessionStart);
+
+                    fetch(aceLoginBlock.check2FAEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-WP-Nonce': aceLoginBlock.nonce,
+                        },
+                        body: JSON.stringify({ 
+                            username,
+                            timestamp: sessionStart,
+                            csrf_token: aceLoginBlock.csrfToken
+                        }),
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.needs2FASetup) {
+                            formInputs.twoFactorState.value = 'setup';
+                            formInputs.twoFactorVerified.value = 'true';
+                            form.submit();
+                        } else if (data.is2FAEnabled) {
+                            formInputs.twoFactorState.value = 'verification';
+                            formInputs.twoFactorNonce.value = data.nonce;
+                            show2FAPrompt(form, username, formInputs);
+                        } else {
+                            formInputs.twoFactorState.value = 'disabled';
+                            formInputs.twoFactorVerified.value = 'true';
+                            form.submit();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking 2FA status:', error);
+                        alert('An error occurred while checking the 2FA status.');
+                        formInputs.twoFactorState.value = 'error';
+                    });
+                }
+            }
+
+            function createHiddenInput(name, value) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                return input;
+            }
+
+            function handleFormSubmit(e) {
+                const form = e.target;
+                const twoFactorVerified = form.querySelector('input[name="two_factor_verified"]');
+                const twoFactorState = form.querySelector('input[name="two_factor_state"]');
+
+                if (!twoFactorVerified || twoFactorVerified.value !== 'true') {
+                    e.preventDefault();
+                    alert('Please complete two-factor authentication.');
+                    return;
+                }
+
+                const sessionStart = form.querySelector('input[name="session_start"]');
+                if (sessionStart && (Date.now() - parseInt(sessionStart.value, 10)) > 1800000) {
+                    e.preventDefault();
+                    alert('Session expired. Please refresh and try again.');
+                    return;
+                }
+            }
+
+            function show2FAPrompt(form, username) {
+                let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
+                if (!twoFAContainer) {
+                    const pwdInput = form.querySelector('input[name="pwd"]');
+                    const pwdLabel = form.querySelector('label[for="user_pass"]');
+                    const pwdShowToggle = form.querySelector('span[data-show-password="true"]');
+
+                    const twoFALabel = document.createElement('label');
+                    twoFALabel.setAttribute('for', '2fa_code');
+                    twoFALabel.textContent = aceLoginBlock.twoFALabel || 'Enter Authentication Code';
+
+                    const twoFAInput = document.createElement('input');
+                    twoFAInput.type = 'text';
+                    twoFAInput.name = '2fa_code';
+                    twoFAInput.className = 'tfa-code-input';
+                    twoFAInput.placeholder = aceLoginBlock.twoFAPlaceholder || 'Authentication Code';
+                    twoFAInput.required = true;
+
+                    pwdInput.style.display = 'none';
+                    if (pwdLabel) pwdLabel.style.display = 'none';
+                    if (pwdShowToggle) pwdShowToggle.style.display = 'none';
+
+                    pwdInput.insertAdjacentElement('afterend', twoFAInput);
+                    if (pwdLabel) {
+                        pwdLabel.insertAdjacentElement('afterend', twoFALabel);
+                    } else {
+                        pwdInput.parentElement.insertBefore(twoFALabel, pwdInput);
+                    }
+
+                    const verify2FA = () => {
+                        const twoFACode = twoFAInput.value;
+                        if (!twoFACode) {
+                            alert('Please enter your authentication code.');
+                            return;
+                        }
+
+                        fetch(aceLoginBlock.verify2FAEndpoint, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-WP-Nonce': aceLoginBlock.nonce,
+                            },
+                            body: JSON.stringify({ code: twoFACode, username }),
+                        })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.success) {
+                                form.dataset.twoFactorVerified = 'true';
+                                form.submit();
+                            } else {
+                                alert(data.message || 'Invalid authentication code. Please try again.');
+                            }
+                        })
+                        .catch((error) => {
+                            console.error('2FA verification failed:', error);
+                            alert('An error occurred while verifying the authentication code.');
+                        });
+                    };
+
+                    const loginButton = form.querySelector('#wp-submit');
+                    loginButton.textContent = aceLoginBlock.submit2FA || 'Verify';
+                    loginButton.removeEventListener('click', handleLoginAttempt);
+                    loginButton.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        verify2FA();
+                    });
+
+                    twoFAInput.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            verify2FA();
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+    <?php
+}
+add_action('login_form', 'acemedia_add_2fa_to_login_form');
 
