@@ -1274,12 +1274,15 @@ function acemedia_2fa_setup_notice() {
             }
             .acemedia-modal-content {
                 background-color: #fefefe;
-                margin: 15% auto;
+                margin: 0px auto;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
                 padding: 20px;
                 border: 1px solid #888;
                 width: 80%;
                 max-width: 600px;
-                position: relative;
+                position: absolute;
                 z-index: 1000001;
             }
         </style>
