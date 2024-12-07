@@ -165,9 +165,9 @@ function acemedia_login_block_render_settings_page() {
                     $is_2fa_enabled = get_option("acemedia_2fa_enabled_{$role}", false);
                     ?>
                     <tr valign="top">
-                        <th scope="row"><?php echo esc_html(ucfirst($role)); ?> <?php esc_html_e('Settings', 'acemedia-login-block'); ?></th>
+                        <th scope="row"><?php echo esc_html(ucfirst($role)); ?></th>
                         <td>
-                        <label for="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>">
+                        <label for="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>"><?php esc_html_e('Redirect: ', 'acemedia-login-block'); ?>
                                 <select id="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>" name="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>">
                                     <option value=""><?php esc_html_e('Default behaviour', 'acemedia-login-block'); ?></option>
                                     
