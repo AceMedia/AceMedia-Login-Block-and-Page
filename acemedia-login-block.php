@@ -41,15 +41,8 @@ function acemedia_login_block_register_settings() {
         'default' => 0,
     ]);
 
-    // Register the 2FA enabled setting
-    register_setting('acemedia_login_block_options_group', 'acemedia_2fa_enabled', [
-        'type' => 'boolean',
-        'description' => __('Enable Two-Factor Authentication (2FA)', 'acemedia-login-block'),
-        'default' => 0,
-    ]);
-
-    // Register settings for redirect URLs
-    $roles = wp_roles()->roles; // Get all WordPress roles
+    // Register settings for redirect URLs and 2FA per role
+    $roles = wp_roles()->roles;
     foreach ($roles as $role => $details) {
         // Register role-specific redirect URL settings
         $role_redirect_key = "acemedia_login_block_redirect_{$role}";
@@ -57,6 +50,14 @@ function acemedia_login_block_register_settings() {
             'type' => 'string',
             'description' => sprintf(__('Redirect URL for %s role', 'acemedia-login-block'), $details['name']),
             'default' => '',
+        ]);
+
+        // Register role-specific 2FA settings
+        $role_2fa_key = "acemedia_2fa_enabled_{$role}";
+        register_setting('acemedia_login_block_options_group', $role_2fa_key, [
+            'type' => 'boolean',
+            'description' => sprintf(__('Enable 2FA for %s role', 'acemedia-login-block'), $details['name']),
+            'default' => false,
         ]);
     }
 
@@ -150,22 +151,23 @@ function acemedia_login_block_render_settings_page() {
                     <td><?php acemedia_login_block_custom_page_field_html(); ?></td>
                 </tr>
                 <?php
-                // Get all WordPress roles
                 $roles = wp_roles()->roles;
 
-                // Get all public pages for front-end options
-                $front_end_pages = get_pages();
+         // Get all public pages for front-end options
+         $front_end_pages = get_pages();
 
-                // Include the global admin pages array
-                global $acemedia_admin_pages;
+         // Include the global admin pages array
+         global $acemedia_admin_pages;
+
 
                 foreach ($roles as $role => $details) {
                     $redirect_url = get_option("acemedia_login_block_redirect_{$role}", '');
+                    $is_2fa_enabled = get_option("acemedia_2fa_enabled_{$role}", false);
                     ?>
                     <tr valign="top">
-                        <th scope="row"><?php echo esc_html(ucfirst($role)); ?> <?php esc_html_e('Redirect URL', 'acemedia-login-block'); ?></th>
+                        <th scope="row"><?php echo esc_html(ucfirst($role)); ?> <?php esc_html_e('Settings', 'acemedia-login-block'); ?></th>
                         <td>
-                            <label for="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>">
+                        <label for="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>">
                                 <select id="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>" name="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>">
                                     <option value=""><?php esc_html_e('Default behaviour', 'acemedia-login-block'); ?></option>
                                     
@@ -198,36 +200,24 @@ function acemedia_login_block_render_settings_page() {
                                     ?>
                                 </select>
                             </label>
+                            <label>
+                                <input type="checkbox" 
+                                       name="<?php echo esc_attr("acemedia_2fa_enabled_{$role}"); ?>" 
+                                       value="1" 
+                                       <?php checked($is_2fa_enabled, true); ?>>
+                                <?php esc_html_e('Requires 2FA', 'acemedia-login-block'); ?>
+                            </label>
                         </td>
                     </tr>
                     <?php
                 }
                 ?>
-
-      
-                <!-- 2FA Enable/Disable -->
-                <tr valign="top">
-                    <th scope="row"><?php esc_html_e('Enable Two-Factor Authentication (2FA)', 'acemedia-login-block'); ?></th>
-                    <td>
-                        <label for="acemedia_2fa_enabled">
-                            <input type="checkbox" id="acemedia_2fa_enabled" name="acemedia_2fa_enabled" value="1" <?php checked(1, get_option('acemedia_2fa_enabled', 0)); ?>>
-                            <?php esc_html_e('Enable 2FA for additional login security.', 'acemedia-login-block'); ?>
-                        </label>
-                    </td>
-                </tr>
-
-    
-
             </table>
             <?php submit_button(); ?>
         </form>
     </div>
     <?php
 }
-
-
-
-
 
 
 /**
@@ -769,12 +759,20 @@ function acemedia_check_2fa_status(WP_REST_Request $request) {
         return new WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
     }
 
+    $needs_2fa = false;
+    foreach ($user->roles as $role) {
+        if (get_option("acemedia_2fa_enabled_{$role}", false)) {
+            $needs_2fa = true;
+            break;
+        }
+    }
+
     $is_2fa_enabled = (bool) get_user_meta($user->ID, '_acemedia_2fa_enabled', true);
     $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
-    $needs_setup = acemedia_user_needs_2fa_setup($user->ID);
+    $needs_setup = $needs_2fa && (!$is_2fa_enabled || !get_user_meta($user->ID, '_acemedia_2fa_setup_complete', true));
 
     return [
-        'is2FAEnabled' => $is_2fa_enabled,
+        'is2FAEnabled' => $is_2fa_enabled && $needs_2fa,
         'method' => $selected_method,
         'needs2FASetup' => $needs_setup,
     ];
@@ -900,18 +898,26 @@ add_action('edit_user_profile_update', 'acemedia_save_2fa_fields');
 
 
 function acemedia_user_needs_2fa_setup($user_id) {
-    $is_2fa_enabled_global = (bool) get_option('acemedia_2fa_enabled', false);
-    if (!$is_2fa_enabled_global) {
+    $user = get_userdata($user_id);
+    if (!$user) {
         return false;
     }
 
-    $user_2fa_enabled = (bool) get_user_meta($user_id, '_acemedia_2fa_enabled', true);
-    $user_2fa_setup_complete = (bool) get_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
-    
-    // Return true if either:
-    // 1. Setup has never been completed, or
-    // 2. 2FA is disabled for this user when it should be enabled
-    return $is_2fa_enabled_global && (!$user_2fa_setup_complete || !$user_2fa_enabled);
+    // Check if any of the user's roles require 2FA
+    foreach ($user->roles as $role) {
+        $role_2fa_required = (bool) get_option("acemedia_2fa_enabled_{$role}", false);
+        if ($role_2fa_required) {
+            $user_2fa_enabled = (bool) get_user_meta($user_id, '_acemedia_2fa_enabled', true);
+            $user_2fa_setup_complete = (bool) get_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
+            
+            // If 2FA is required for this role but not set up, return true
+            if (!$user_2fa_setup_complete || !$user_2fa_enabled) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 // Add admin notice for users who need to set up 2FA
