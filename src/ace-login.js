@@ -118,43 +118,45 @@ document.addEventListener('DOMContentLoaded', function () {
     function show2FAPrompt(form, username) {
         let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
         if (!twoFAContainer) {
-            twoFAContainer = document.createElement('div');
-            twoFAContainer.className = 'wp-block-acemedia-2fa-block';
-            twoFAContainer.innerHTML = `
-                <label for="tfa_code">
-                    ${aceLoginBlock.twoFALabel || 'Enter Authentication Code'}
-                </label>
-                <input 
-                    type="text" 
-                    name="2fa_code" 
-                    class="tfa-code-input"
-                    placeholder="${aceLoginBlock.twoFAPlaceholder || 'Authentication Code'}" 
-                    required 
-                />
-                <button type="button" class="button verify-2fa">
-                    ${aceLoginBlock.submit2FA || 'Verify'}
-                </button>
-            `;
-            form.appendChild(twoFAContainer);
+            // Find password field and related elements
+            const pwdInput = form.querySelector('input[name="pwd"]');
+            const pwdLabel = form.querySelector('label[for="pwd"]');
+            const pwdShowToggle = form.querySelector('span[data-show-password="true"]');
+    
+            // Create 2FA label and input
+            const twoFALabel = document.createElement('label');
+            twoFALabel.setAttribute('for', '2fa_code');
+            twoFALabel.textContent = aceLoginBlock.twoFALabel || 'Enter Authentication Code';
+    
+            const twoFAInput = document.createElement('input');
+            twoFAInput.type = 'text';
+            twoFAInput.name = '2fa_code';
+            twoFAInput.className = 'tfa-code-input';
+            twoFAInput.placeholder = aceLoginBlock.twoFAPlaceholder || 'Authentication Code';
+            twoFAInput.required = true;
 
-            // Hide other fields
-            form.querySelectorAll('input, button, .wp-block-button').forEach((element) => {
-                if (!element.closest('.wp-block-acemedia-2fa-block')) {
-                    element.style.display = 'none';
-                }
-            });
-
+    
+            // Hide password elements
+            pwdInput.style.display = 'none';
+            if (pwdLabel) pwdLabel.style.display = 'none';
+            if (pwdShowToggle) pwdShowToggle.style.display = 'none';
+    
+            // Insert 2FA elements after password elements
+            pwdInput.insertAdjacentElement('afterend', twoFAInput);
+            if (pwdLabel) {
+                pwdLabel.insertAdjacentElement('afterend', twoFALabel);
+            } else {
+                pwdInput.parentElement.insertBefore(twoFALabel, pwdInput);
+            }
+    
             // Handle verification button click
-            const verifyButton = twoFAContainer.querySelector('.verify-2fa');
-            const twoFAInput = twoFAContainer.querySelector('.tfa-code-input');
-
             const verify2FA = () => {
                 const twoFACode = twoFAInput.value;
                 if (!twoFACode) {
                     alert('Please enter your authentication code.');
                     return;
                 }
-
+    
                 fetch(aceLoginBlock.verify2FAEndpoint, {
                     method: 'POST',
                     headers: {
@@ -177,8 +179,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     alert('An error occurred while verifying the authentication code.');
                 });
             };
-
-            verifyButton.addEventListener('click', verify2FA);
+    
+            // Replace verify button click handler with login button handler:
+const loginButton = form.querySelector('.wp-block-button__link');
+loginButton.textContent = aceLoginBlock.submit2FA || 'Verify';
+loginButton.removeEventListener('click', handleLoginAttempt);
+loginButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    verify2FA();
+});
             
             // Handle enter key in 2FA input
             twoFAInput.addEventListener('keypress', function(e) {

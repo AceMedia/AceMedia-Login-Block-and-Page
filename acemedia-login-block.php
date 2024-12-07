@@ -917,8 +917,8 @@ function acemedia_verify_2fa_code(WP_REST_Request $request) {
     $attempts = get_transient('2fa_attempts_' . $user->ID);
     if ($attempts === false) {
         set_transient('2fa_attempts_' . $user->ID, 1, HOUR_IN_SECONDS);
-    } else if ($attempts >= 5) {
-     //   return new WP_Error('too_many_attempts', __('Too many attempts. Please try again later.', 'acemedia-login-block'));
+    } else if ($attempts >= 10) {
+        return new WP_Error('too_many_attempts', __('Too many attempts. Please try again later.', 'acemedia-login-block'));
     } else {
         set_transient('2fa_attempts_' . $user->ID, $attempts + 1, HOUR_IN_SECONDS);
     }
