@@ -46,7 +46,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 })
                 .then((response) => response.json())
                 .then((data) => {
-                    if (data.is2FAEnabled) {
+                    if (data.needs2FASetup) {
+                        // Allow login to proceed so they can set up 2FA
+                        form.submit();
+                    } else if (data.is2FAEnabled) {
                         // Create 2FA block dynamically
                         let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
                         if (!twoFAContainer) {

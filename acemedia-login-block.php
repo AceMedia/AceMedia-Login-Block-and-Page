@@ -771,10 +771,12 @@ function acemedia_check_2fa_status(WP_REST_Request $request) {
 
     $is_2fa_enabled = (bool) get_user_meta($user->ID, '_acemedia_2fa_enabled', true);
     $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
+    $needs_setup = acemedia_user_needs_2fa_setup($user->ID);
 
     return [
         'is2FAEnabled' => $is_2fa_enabled,
         'method' => $selected_method,
+        'needs2FASetup' => $needs_setup,
     ];
 }
 
@@ -833,7 +835,7 @@ function acemedia_add_2fa_fields($user) {
 
     $is_2fa_enabled = get_user_meta($user->ID, '_acemedia_2fa_enabled', true);
     $secret = get_user_meta($user->ID, '_acemedia_2fa_secret', true);
-    $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
+    $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true) ?: 'email';
     ?>
     <h3><?php esc_html_e('Two-Factor Authentication', 'acemedia-login-block'); ?></h3>
     <table class="form-table">
@@ -852,8 +854,7 @@ function acemedia_add_2fa_fields($user) {
                 </select>
             </td>
         </tr>
-        <?php if ($is_2fa_enabled && $secret && $selected_method === 'auth_app'): ?>
-        <tr>
+        <tr id="acemedia_2fa_qr_row" style="display: <?php echo ($is_2fa_enabled && $selected_method === 'auth_app') ? 'table-row' : 'none'; ?>">
             <th><label for="acemedia_2fa_qr"><?php esc_html_e('2FA QR Code', 'acemedia-login-block'); ?></label></th>
             <td>
                 <?php $qr_code_url = acemedia_generate_qr_code($user->ID); ?>
@@ -861,7 +862,6 @@ function acemedia_add_2fa_fields($user) {
                 <p class="description"><?php esc_html_e('Scan this QR code with your authentication app.', 'acemedia-login-block'); ?></p>
             </td>
         </tr>
-        <?php endif; ?>
     </table>
     <?php
 }
@@ -885,17 +885,239 @@ function acemedia_save_2fa_fields($user_id) {
     $is_2fa_enabled = isset($_POST['acemedia_2fa_enabled']) ? 1 : 0;
     update_user_meta($user_id, '_acemedia_2fa_enabled', $is_2fa_enabled);
 
-    $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field($_POST['acemedia_2fa_method']) : 'email';
-    update_user_meta($user_id, '_acemedia_2fa_method', $selected_method);
-
-    if ($is_2fa_enabled && $selected_method === 'auth_app') {
-        $secret = get_user_meta($user_id, '_acemedia_2fa_secret', true);
-        if (!$secret) {
-            acemedia_generate_qr_code($user_id);
-        }
-    } else {
+    // If 2FA is disabled, reset the setup status
+    if (!$is_2fa_enabled) {
+        delete_user_meta($user_id, '_acemedia_2fa_setup_complete');
         delete_user_meta($user_id, '_acemedia_2fa_secret');
     }
+
+    $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field($_POST['acemedia_2fa_method']) : 'email';
+    update_user_meta($user_id, '_acemedia_2fa_method', $selected_method);
 }
 add_action('personal_options_update', 'acemedia_save_2fa_fields');
 add_action('edit_user_profile_update', 'acemedia_save_2fa_fields');
+
+
+
+function acemedia_user_needs_2fa_setup($user_id) {
+    $is_2fa_enabled_global = (bool) get_option('acemedia_2fa_enabled', false);
+    if (!$is_2fa_enabled_global) {
+        return false;
+    }
+
+    $user_2fa_enabled = (bool) get_user_meta($user_id, '_acemedia_2fa_enabled', true);
+    $user_2fa_setup_complete = (bool) get_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
+    
+    // Return true if either:
+    // 1. Setup has never been completed, or
+    // 2. 2FA is disabled for this user when it should be enabled
+    return $is_2fa_enabled_global && (!$user_2fa_setup_complete || !$user_2fa_enabled);
+}
+
+// Add admin notice for users who need to set up 2FA
+function acemedia_2fa_setup_notice() {
+    $user_id = get_current_user_id();
+    if (acemedia_user_needs_2fa_setup($user_id)) {
+        ?>
+        <!-- Overlay and Warning -->
+        <style>
+            #wpwrap::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(255, 255, 255, 0.9);
+                z-index: 999998;
+            }
+            .acemedia-modal {
+                display: none;
+                position: fixed;
+                z-index: 1000000;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.4);
+            }
+            .acemedia-modal-content {
+                background-color: #fefefe;
+                margin: 15% auto;
+                padding: 20px;
+                border: 1px solid #888;
+                width: 80%;
+                max-width: 600px;
+                position: relative;
+                z-index: 1000001;
+            }
+        </style>
+
+        <!-- Notice -->
+        <div class="notice notice-warning" style="display: none;"></div>
+
+        <!-- Modal -->
+        <div id="acemedia-2fa-setup-modal" class="acemedia-modal">
+            <div class="acemedia-modal-content">
+                <h2><?php _e('Two-Factor Authentication Required', 'acemedia-login-block'); ?></h2>
+                <p><?php _e('You must set up Two-Factor Authentication to continue using the admin area. Please choose your preferred authentication method:', 'acemedia-login-block'); ?></p>
+                
+                <table class="form-table">
+                    <tr>
+                        <th><label for="acemedia_2fa_method"><?php esc_html_e('Authentication Method', 'acemedia-login-block'); ?></label></th>
+                        <td>
+                            <select name="acemedia_2fa_method" id="acemedia_2fa_method">
+                                <option value="email"><?php esc_html_e('Email Code', 'acemedia-login-block'); ?></option>
+                                <option value="auth_app"><?php esc_html_e('Authentication App', 'acemedia-login-block'); ?></option>
+                            </select>
+                            <p class="description">
+                                <?php esc_html_e('Email: Receive codes via email each time you log in.', 'acemedia-login-block'); ?><br>
+                                <?php esc_html_e('Authentication App: Use an app like Google Authenticator for offline code generation.', 'acemedia-login-block'); ?>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr id="acemedia_2fa_qr_row" style="display: none;">
+                        <th><label for="acemedia_2fa_qr"><?php esc_html_e('QR Code', 'acemedia-login-block'); ?></label></th>
+                        <td>
+                            <?php $qr_code_url = acemedia_generate_qr_code(get_current_user_id()); ?>
+                            <img src="<?php echo esc_url($qr_code_url); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
+                            <p class="description"><?php esc_html_e('Scan this QR code with your authentication app to get started.', 'acemedia-login-block'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+
+                <div class="submit-wrapper" style="margin-top: 20px; text-align: right;">
+                    <button type="button" class="button button-primary" onclick="acemediaSave2FASetup()">
+                        <?php _e('Save and Enable 2FA', 'acemedia-login-block'); ?>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Show modal immediately
+            document.getElementById('acemedia-2fa-setup-modal').style.display = 'block';
+
+            // Method change handler
+            document.addEventListener('change', function(event) {
+                if (event.target.id === 'acemedia_2fa_method') {
+                    const qrRow = document.getElementById('acemedia_2fa_qr_row');
+                    qrRow.style.display = event.target.value === 'auth_app' ? 'table-row' : 'none';
+                    
+                    if (event.target.value === 'auth_app') {
+                        const qrImage = qrRow.querySelector('img');
+                        if (qrImage) {
+                            const timestamp = new Date().getTime();
+                            qrImage.src = qrImage.src.split('?')[0] + '?' + timestamp;
+                        }
+                    }
+                }
+            });
+
+            function acemediaSave2FASetup() {
+                const formData = new FormData();
+                formData.append('action', 'acemedia_save_2fa_setup');
+                formData.append('_ajax_nonce', '<?php echo wp_create_nonce("acemedia_2fa_setup"); ?>');
+                formData.append('acemedia_2fa_enabled', '1');
+                formData.append('acemedia_2fa_method', document.getElementById('acemedia_2fa_method').value);
+
+                fetch(ajaxurl, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.href = data.data.redirect;
+                    } else {
+                        alert(data.data.message || 'Error saving 2FA settings');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error saving 2FA settings');
+                });
+            }
+        </script>
+        <?php
+    }
+}
+
+add_action('admin_notices', 'acemedia_2fa_setup_notice');
+
+// Handle AJAX save
+function acemedia_handle_2fa_setup() {
+    check_ajax_referer('acemedia_2fa_setup');
+
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+        wp_send_json_error(['message' => 'Not logged in']);
+        return;
+    }
+
+    $is_2fa_enabled = isset($_POST['acemedia_2fa_enabled']) ? 1 : 0;
+    $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field($_POST['acemedia_2fa_method']) : 'email';
+
+    update_user_meta($user_id, '_acemedia_2fa_enabled', $is_2fa_enabled);
+    update_user_meta($user_id, '_acemedia_2fa_method', $selected_method);
+    update_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
+
+    // Get user's roles and determine redirect URL
+    $user = get_userdata($user_id);
+    $redirect_url = admin_url(); // Default fallback
+
+    // Check for role-specific redirects
+    foreach ($user->roles as $role) {
+        $role_redirect_key = "acemedia_login_block_redirect_{$role}";
+        $role_redirect_url = get_option($role_redirect_key);
+
+        if (!empty($role_redirect_url)) {
+            $redirect_url = esc_url($role_redirect_url);
+            break; // Stop after first matching role redirect
+        }
+    }
+
+    wp_send_json_success([
+        'message' => 'Settings saved',
+        'redirect' => $redirect_url
+    ]);
+}
+add_action('wp_ajax_acemedia_save_2fa_setup', 'acemedia_handle_2fa_setup');
+
+
+
+function acemedia_enforce_2fa_setup() {
+    // Don't run on AJAX requests or REST API endpoints
+    if (wp_doing_ajax() || defined('REST_REQUEST')) {
+        return;
+    }
+
+    // Get current user
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+        return;
+    }
+
+    // Check if user needs 2FA setup
+    if (acemedia_user_needs_2fa_setup($user_id)) {
+        // Always add the notice action
+        add_action('admin_notices', 'acemedia_2fa_setup_notice');
+        
+        global $pagenow;
+        
+        // Allow access to profile.php and admin-ajax.php
+        $allowed_pages = array(
+            'profile.php',
+            'admin-ajax.php'
+        );
+
+        // Only redirect if not already on an allowed page
+        if (!in_array($pagenow, $allowed_pages)) {
+            wp_safe_redirect(admin_url('profile.php'));
+            exit;
+        }
+    }
+}
+add_action('admin_init', 'acemedia_enforce_2fa_setup', 1);
+
