@@ -81,7 +81,7 @@ function acemedia_remove_spans_and_content($title) {
     // Remove <span> tags and their content
     $cleaned_title = preg_replace('/<span[^>]*>.*?<\/span>/i', '', $title);
     $cleaned_title = wp_strip_all_tags($cleaned_title);
-    
+
     // Trim the title to remove any leading/trailing whitespace
     return trim($cleaned_title);
 }
@@ -170,7 +170,7 @@ function acemedia_login_block_render_settings_page() {
                         <label for="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>"><?php esc_html_e('Redirect: ', 'acemedia-login-block'); ?>
                                 <select id="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>" name="acemedia_login_block_redirect_<?php echo esc_attr($role); ?>">
                                     <option value=""><?php esc_html_e('Default behaviour', 'acemedia-login-block'); ?></option>
-                                    
+
                                     <!-- Frontend Pages Header -->
                                     <option disabled><?php esc_html_e('--- Frontend Pages ---', 'acemedia-login-block'); ?></option>
                                     <?php
@@ -180,10 +180,10 @@ function acemedia_login_block_render_settings_page() {
                                             <?php echo esc_html($page->post_title); ?>
                                         </option>
                                     <?php endforeach; ?>
-                                    
+
                                     <!-- Admin Pages Header -->
                                     <option disabled><?php esc_html_e('--- Admin Pages ---', 'acemedia-login-block'); ?></option>
-                                    <?php 
+                                    <?php
                                     // Admin pages options
                                     foreach ($acemedia_admin_pages as $page => $info) {
                                         // Check if the role has the capability to access the page
@@ -201,9 +201,9 @@ function acemedia_login_block_render_settings_page() {
                                 </select>
                             </label>
                             <label>
-                                <input type="checkbox" 
-                                       name="<?php echo esc_attr("acemedia_2fa_enabled_{$role}"); ?>" 
-                                       value="1" 
+                                <input type="checkbox"
+                                       name="<?php echo esc_attr("acemedia_2fa_enabled_{$role}"); ?>"
+                                       value="1"
                                        <?php checked($is_2fa_enabled, true); ?>>
                                 <?php esc_html_e('Requires 2FA', 'acemedia-login-block'); ?>
                             </label>
@@ -278,11 +278,11 @@ function acemedia_login_block_render_settings_page() {
 
 <div style="margin-top: 20px;">
     <p>
-        <?php 
+        <?php
         printf(
             esc_html__('Total log size: %s', 'acemedia-login-block'),
             size_format($total_log_size)
-        ); 
+        );
         ?>
     </p>
     <form method="post" action="">
@@ -298,8 +298,8 @@ function acemedia_login_block_render_settings_page() {
 
 function acemedia_handle_clear_2fa_logs() {
     if (
-        isset($_POST['clear_2fa_logs']) && 
-        isset($_POST['clear_2fa_logs_nonce']) && 
+        isset($_POST['clear_2fa_logs']) &&
+        isset($_POST['clear_2fa_logs_nonce']) &&
         wp_verify_nonce($_POST['clear_2fa_logs_nonce'], 'clear_2fa_logs') &&
         current_user_can('manage_options')
     ) {
@@ -307,7 +307,7 @@ function acemedia_handle_clear_2fa_logs() {
         foreach ($users as $user) {
             delete_user_meta($user->ID, '_acemedia_2fa_logs');
         }
-        
+
         add_settings_error(
             'acemedia_login_block_messages',
             'logs-cleared',
@@ -348,8 +348,8 @@ function acemedia_login_block_load_custom_page_template() {
     if ( isset( $_SERVER['REQUEST_URI'] ) ) {
         $request_uri = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) );
         if ( strpos( $request_uri, 'wp-login.php' ) !== false && $custom_page_id ) {
-    
-            
+
+
             // If the request method is POST, let WordPress handle the login process
             if ( isset( $_SERVER['REQUEST_METHOD'] ) && $_SERVER['REQUEST_METHOD'] === 'POST' ) {
                 return; // Let WordPress handle the login submission
@@ -508,7 +508,7 @@ function acemedia_login_block_enqueue_assets() {
         true
     );
 
- 
+
     wp_localize_script('acemedia-login-block-editor', 'aceLoginBlock', array(
         'loginUrl' => site_url('wp-login.php'),
         'redirectUrl' => site_url('/wp-admin'),
@@ -581,7 +581,7 @@ function acemedia_render_username_block($attributes) {
 
     // Escape the placeholder for safe HTML output
     $placeholder = esc_attr($placeholder);
-    
+
     // Return the sanitized and escaped input field
     return '<input type="text" id="log" name="log" placeholder="' . $placeholder . '" required />';
 }
@@ -712,7 +712,7 @@ register_setting('acemedia_login_block_options_group', 'acemedia_2fa_method', [
 
 function acemedia_verify_qr_code($secret, $code) {
     require_once 'vendor/autoload.php';
-    
+
     try {
         $totp = \OTPHP\TOTP::create($secret);
         return $totp->verify($code);
@@ -725,7 +725,7 @@ function acemedia_verify_qr_code($secret, $code) {
 
 function acemedia_send_2fa_email($user_id) {
     $user = get_userdata($user_id);
-    
+
     if ($user && is_email($user->user_email)) {
         $code = wp_generate_password(6, false, false);
         update_user_meta($user_id, '_acemedia_2fa_code', $code);
@@ -763,19 +763,19 @@ function acemedia_generate_qr_code($user_id) {
         // Define valid Base32 alphabet (A-Z and 2-7 only)
         $base32_alphabet = str_split('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567');
         $secret = '';
-        
+
         // Generate exactly 32 characters from valid Base32 alphabet
         for ($i = 0; $i < 32; $i++) {
             $secret .= $base32_alphabet[array_rand($base32_alphabet)];
         }
-        
+
         update_user_meta($user_id, '_acemedia_2fa_secret', $secret);
     }
 
     // Get site and user info
     $site_name = html_entity_decode(get_bloginfo('name'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $username = get_userdata($user_id)->user_login;
-    
+
     // Create otpauth URI with proper encoding
     $uri = sprintf(
         'otpauth://totp/%s:%s?secret=%s&issuer=%s',
@@ -785,7 +785,7 @@ function acemedia_generate_qr_code($user_id) {
         rawurlencode($site_name)
     );
 
-  
+
     error_log('Raw secret: ' . $secret);
     error_log('Generated TOTP URI: ' . $uri);
 
@@ -804,15 +804,15 @@ function acemedia_generate_qr_code($user_id) {
     // Generate and save QR code
     $writer = new PngWriter();
     $result = $writer->write($qrCode);
-    
+
     // Save the QR code image
     $qrcodes_dir = plugin_dir_path(__FILE__) . 'qrcodes/';
     if (!file_exists($qrcodes_dir)) {
         mkdir($qrcodes_dir, 0755, true);
     }
-    
+
     $result->saveToFile($qrcodes_dir . $user_id . '.png');
-    
+
     return plugin_dir_url(__FILE__) . 'qrcodes/' . $user_id . '.png';
 }
 
@@ -918,9 +918,15 @@ function acemedia_validate_2fa($user, $username, $password) {
         return $user;
     }
 
-    // Check if 2FA code was provided
     $two_factor_code = isset($_POST['2fa_code']) ? $_POST['2fa_code'] : '';
     if (empty($two_factor_code)) {
+        // Display an input field for the 2FA code if not provided
+        add_action('login_form', function() {
+            echo '<p>';
+            echo '<label for="2fa_code">' . __('Two-Factor Authentication Code', 'acemedia-login-block') . '<br />';
+            echo '<input type="text" name="2fa_code" id="2fa_code" class="input" value="" size="20" /></label>';
+            echo '</p>';
+        });
         return new WP_Error('2fa_required', __('Two-factor authentication code required.', 'acemedia-login-block'));
     }
 
@@ -974,13 +980,13 @@ function acemedia_verify_2fa_code(WP_REST_Request $request) {
                 // Mark code as used
                 $backup_codes[$index]['used'] = true;
                 update_user_meta($user_id, '_acemedia_2fa_backup_codes', $backup_codes);
-                
+
                 // Log backup code usage
                 acemedia_log_2fa_attempt($user_id, [
                     'action' => 'use_backup_code',
                     'time' => current_time('mysql')
                 ]);
-                
+
                 return ['success' => true];
             }
         }
@@ -1019,7 +1025,7 @@ function acemedia_verify_2fa_code(WP_REST_Request $request) {
 
 add_action('wp_ajax_get_or_generate_backup_codes', function() {
     check_ajax_referer('get_or_generate_backup_codes');
-    
+
     $user_id = get_current_user_id();
     if (!$user_id || !current_user_can('edit_user', $user_id)) {
         wp_send_json_error(['message' => __('Permission denied.', 'acemedia-login-block')]);
@@ -1028,14 +1034,14 @@ add_action('wp_ajax_get_or_generate_backup_codes', function() {
 
     $force_new = isset($_POST['force_new']) && $_POST['force_new'] === 'true';
     $backup_codes = get_user_meta($user_id, '_acemedia_2fa_backup_codes', true);
-    
+
     if ($force_new || !is_array($backup_codes) || empty($backup_codes)) {
         // Generate new codes with high entropy
         $codes = [];
         for ($i = 0; $i < 10; $i++) {
             $codes[] = strtoupper(bin2hex(random_bytes(4))); // 8 characters of high entropy
         }
-        
+
         // Store codes with metadata
         $hashed_codes = array_map(function($code) {
             return [
@@ -1044,22 +1050,22 @@ add_action('wp_ajax_get_or_generate_backup_codes', function() {
                 'used' => false
             ];
         }, $codes);
-        
+
         update_user_meta($user_id, '_acemedia_2fa_backup_codes', $hashed_codes);
-        
+
         // Log backup code generation
         acemedia_log_2fa_attempt($user_id, [
             'action' => 'generate_backup_codes',
             'time' => current_time('mysql')
         ]);
-        
+
         wp_send_json_success(['codes' => $codes]);
     } else {
         // Return placeholder codes for existing backup codes
         $codes = array_map(function($code_data) {
             return sprintf('BACKUP-%s', substr(md5($code_data['hash']), 0, 4));
         }, $backup_codes);
-        
+
         wp_send_json_success(['codes' => $codes]);
     }
 });
@@ -1091,7 +1097,7 @@ function acemedia_log_2fa_attempt($user_id, $data = []) {
         'ip' => $_SERVER['REMOTE_ADDR'],
         'user_agent' => $_SERVER['HTTP_USER_AGENT']
     ], $data);
-    
+
     $logs = get_user_meta($user_id, '_acemedia_2fa_logs', true) ?: [];
     array_unshift($logs, $log);
     update_user_meta($user_id, '_acemedia_2fa_logs', array_slice($logs, 0, 10));
@@ -1171,7 +1177,7 @@ $('#generate-backup-codes').on('click', function() {
         const codes = $('#backup-codes').text();
         const siteDomain = '<?php echo sanitize_file_name(parse_url(get_site_url(), PHP_URL_HOST)); ?>';
         const filename = siteDomain + '-2fa-backup-codes.txt';
-        
+
         const blob = new Blob([codes], { type: 'text/plain' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -1234,7 +1240,7 @@ function acemedia_user_needs_2fa_setup($user_id) {
         if ($role_2fa_required) {
             $user_2fa_enabled = (bool) get_user_meta($user_id, '_acemedia_2fa_enabled', true);
             $user_2fa_setup_complete = (bool) get_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
-            
+
             // If 2FA is required for this role but not set up, return true
             if (!$user_2fa_setup_complete || !$user_2fa_enabled) {
                 return true;
@@ -1295,7 +1301,7 @@ function acemedia_2fa_setup_notice() {
             <div class="acemedia-modal-content">
                 <h2><?php _e('Two-Factor Authentication Required', 'acemedia-login-block'); ?></h2>
                 <p><?php _e('You must set up Two-Factor Authentication to continue using the admin area. Please choose your preferred authentication method:', 'acemedia-login-block'); ?></p>
-                
+
                 <table class="form-table">
                     <tr>
                         <th><label for="acemedia_2fa_method"><?php esc_html_e('Authentication Method', 'acemedia-login-block'); ?></label></th>
@@ -1363,7 +1369,7 @@ function acemedia_2fa_setup_notice() {
                 if (event.target.id === 'acemedia_2fa_method') {
                     const qrRow = document.getElementById('acemedia_2fa_qr_row');
                     qrRow.style.display = event.target.value === 'auth_app' ? 'table-row' : 'none';
-                    
+
                     if (event.target.value === 'auth_app') {
                         const qrImage = qrRow.querySelector('img');
                         if (qrImage) {
@@ -1463,9 +1469,9 @@ function acemedia_enforce_2fa_setup() {
     if (acemedia_user_needs_2fa_setup($user_id)) {
         // Always add the notice action
         add_action('admin_notices', 'acemedia_2fa_setup_notice');
-        
+
         global $pagenow;
-        
+
         // Allow access to profile.php and admin-ajax.php
         $allowed_pages = array(
             'profile.php',
@@ -1571,7 +1577,7 @@ function acemedia_add_2fa_to_login_form() {
                             'Content-Type': 'application/json',
                             'X-WP-Nonce': aceLoginBlock.nonce,
                         },
-                        body: JSON.stringify({ 
+                        body: JSON.stringify({
                             username,
                             timestamp: sessionStart,
                             csrf_token: aceLoginBlock.csrfToken
@@ -1713,4 +1719,3 @@ function acemedia_add_2fa_to_login_form() {
     <?php
 }
 add_action('login_form', 'acemedia_add_2fa_to_login_form');
-
