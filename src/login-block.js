@@ -2,9 +2,8 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useBlockProps, InnerBlocks } from '@wordpress/block-editor';
-import { TextControl, PanelBody } from '@wordpress/components';
-import { InspectorControls } from '@wordpress/block-editor';
+import { useBlockProps, InnerBlocks, InspectorControls } from '@wordpress/block-editor';
+import { TextControl, PanelBody, RadioControl } from '@wordpress/components';
 import { registerBlockType } from '@wordpress/blocks';
 
 /**
@@ -23,13 +22,17 @@ registerBlockType('acemedia/login-block', {
             type: 'string',
             default: __('Log In', 'acemedia-login-block'),
         },
+        templateType: {
+            type: 'string',
+            default: 'full', // Default to the full template
+        },
     },
 
     edit: ({ attributes, setAttributes }) => {
-        const { labelRemember, labelLogIn } = attributes;
+        const { labelRemember, labelLogIn, templateType } = attributes;
 
-        // Template for inner blocks
-        const TEMPLATE = [
+        // Full template
+        const FULL_TEMPLATE = [
             ['core/columns', { style: { spacing: { margin: '0px' } } }, [
                 ['core/column', {}, [
                     ['core/paragraph', { content: __('<label for="log"><strong>Username:</strong></label>', 'acemedia-login-block'), align: 'right' }],
@@ -42,7 +45,7 @@ registerBlockType('acemedia/login-block', {
                 ['core/column', {}, [
                     ['core/paragraph', { content: __('<label for="pwd"><strong>Password:</strong></label>', 'acemedia-login-block'), align: 'right' }],
                 ]],
-                ['core/column', {}, [
+                ['core/column', { style: { spacing: { margin: '0px' } } }, [
                     ['acemedia/password-block'],
                 ]],
             ]],
@@ -61,27 +64,54 @@ registerBlockType('acemedia/login-block', {
             ]],
         ];
 
+        // Minimal template
+        const MINIMAL_TEMPLATE = [
+            ['core/group',
+                { layout: { type: 'flex', flexWrap: 'nowrap', justifyContent: 'space-between' } }, [
+                ['acemedia/username-block', {}],
+                ['acemedia/password-block', {}],
+                ['core/button', {
+                    text: labelLogIn,
+                    className: 'button',
+                }],
+            ]],
+        ];
+        
+
+        // Select the appropriate template based on templateType
+        const selectedTemplate = templateType === 'full' ? FULL_TEMPLATE : MINIMAL_TEMPLATE;
+
         return (
             <div {...useBlockProps()}>
                 <InspectorControls>
                     <PanelBody title={__('Login Form Settings', 'acemedia-login-block')}>
-                        {/* Removed the TextControl for redirect URL */}
+                        <RadioControl
+                            label={__('Template Type', 'acemedia-login-block')}
+                            selected={templateType}
+                            options={[
+                                { label: __('Full Template', 'acemedia-login-block'), value: 'full' },
+                                { label: __('Minimal Template', 'acemedia-login-block'), value: 'minimal' },
+                            ]}
+                            onChange={(value) => setAttributes({ templateType: value })}
+                        />
                     </PanelBody>
                 </InspectorControls>
 
                 <form className="wp-block-login-form" method="post">
-                    <InnerBlocks template={TEMPLATE} templateLock="all" />
+                    <InnerBlocks template={selectedTemplate} templateLock="all" />
                 </form>
             </div>
         );
     },
 
-    save: () => (
-        <div className="wp-block-login-form">
-            <form action={aceLoginBlock.loginUrl} method="post">
-                <InnerBlocks.Content />
-                <button type="submit" style={{ display: 'none' }}>Submit</button>
-            </form>
-        </div>
-    ),
+    save: ({ attributes }) => {
+        return (
+            <div className="wp-block-login-form">
+                <form action={aceLoginBlock.loginUrl} method="post">
+                    <InnerBlocks.Content />
+                    <button type="submit" style={{ display: 'none' }}>Submit</button>
+                </form>
+            </div>
+        );
+    },
 });
