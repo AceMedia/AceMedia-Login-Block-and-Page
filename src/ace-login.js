@@ -126,13 +126,15 @@ document.addEventListener('DOMContentLoaded', function () {
             // Create 2FA label and input
             const twoFALabel = document.createElement('label');
             twoFALabel.setAttribute('for', '2fa_code');
-            twoFALabel.textContent = aceLoginBlock.twoFALabel || 'Enter Authentication Code';
+            if (pwdLabel) {
+                twoFALabel.textContent = aceLoginBlock.twoFALabel || '<strong>Enter 2FA Code:</strong>';
+            }
     
             const twoFAInput = document.createElement('input');
             twoFAInput.type = 'text';
             twoFAInput.name = '2fa_code';
             twoFAInput.className = 'tfa-code-input';
-            twoFAInput.placeholder = aceLoginBlock.twoFAPlaceholder || 'Authentication Code';
+            twoFAInput.placeholder = aceLoginBlock.twoFAPlaceholder || '2FA Code';
             twoFAInput.required = true;
 
     
@@ -141,10 +143,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if (pwdLabel) pwdLabel.style.display = 'none';
             if (pwdShowToggle) pwdShowToggle.style.display = 'none';
     
-            // Insert 2FA elements after password elements
-            pwdInput.insertAdjacentElement('afterend', twoFAInput);
+            // Insert 2FA elements before password elements
+            pwdInput.insertAdjacentElement('beforebegin', twoFAInput);
             if (pwdLabel) {
-                pwdLabel.insertAdjacentElement('afterend', twoFALabel);
+                pwdLabel.insertAdjacentElement('beforebegin', twoFALabel);
             } else {
                 pwdInput.parentElement.insertBefore(twoFALabel, pwdInput);
             }
