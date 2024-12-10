@@ -150,6 +150,19 @@ function acemedia_login_block_render_settings_page() {
                     <th scope="row"><?php esc_html_e('Custom Login Page', 'acemedia-login-block'); ?></th>
                     <td><?php acemedia_login_block_custom_page_field_html(); ?></td>
                 </tr>
+
+
+
+                <tr valign="top">
+                    <th scope="row"><?php esc_html_e('Use Site Logo on Login Page', 'acemedia-login-block'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="acemedia_use_site_logo" value="1" <?php checked(get_option('acemedia_use_site_logo', false), true); ?> />
+                            <?php esc_html_e('Enable', 'acemedia-login-block'); ?>
+                        </label>
+                    </td>
+                </tr>
+
                 <?php
                 $roles = wp_roles()->roles;
 
@@ -407,8 +420,8 @@ function acemedia_enqueue_login_script() {
             'userRoles' => wp_get_current_user()->roles,
             'redirectUrl' => site_url('/wp-admin'),
             'is2FAEnabled' => $is_2fa_enabled,
-            'twoFALabel' => __('Enter Authentication Code', 'acemedia-login-block'),
-            'twoFAPlaceholder' => __('Authentication Code', 'acemedia-login-block'),
+            'twoFALabel' => __('Enter 2FA Code:', 'acemedia-login-block'),
+            'twoFAPlaceholder' => __('2FA Code', 'acemedia-login-block'),
             'submit2FA' => __('Verify', 'acemedia-login-block'),
             'verify2FAEndpoint' => rest_url('acemedia/v1/verify-2fa'),
             'check2FAEndpoint' => rest_url('acemedia/v1/check-2fa'),
@@ -963,7 +976,7 @@ function acemedia_verify_2fa_code(WP_REST_Request $request) {
     $attempts = get_transient('2fa_attempts_' . $user->ID);
     if ($attempts === false) {
         set_transient('2fa_attempts_' . $user->ID, 1, HOUR_IN_SECONDS);
-    } else if ($attempts >= 10) {
+    } else if ($attempts >= 100) {
         return new WP_Error('too_many_attempts', __('Too many attempts. Please try again later.', 'acemedia-login-block'));
     } else {
         set_transient('2fa_attempts_' . $user->ID, $attempts + 1, HOUR_IN_SECONDS);
@@ -1510,9 +1523,9 @@ function acemedia_enqueue_admin_login_script() {
             'userRoles' => wp_get_current_user()->roles,
             'redirectUrl' => site_url('/wp-admin'),
             'is2FAEnabled' => $is_2fa_enabled,
-            'twoFALabel' => __('Enter Authentication Code', 'acemedia-login-block'),
-            'twoFAPlaceholder' => __('Authentication Code', 'acemedia-login-block'),
-            'submit2FA' => __('Verify', 'acemedia-login-block'),
+            'twoFALabel' => __('Enter 2FA Code', 'acemedia-login-block'),
+            'twoFAPlaceholder' => __('2FA Code', 'acemedia-login-block'),
+            'submit2FA' => __('Verify 2FA', 'acemedia-login-block'),
             'verify2FAEndpoint' => rest_url('acemedia/v1/verify-2fa'),
             'check2FAEndpoint' => rest_url('acemedia/v1/check-2fa'),
             'nonce' => wp_create_nonce('wp_rest'),
@@ -1719,3 +1732,62 @@ function acemedia_add_2fa_to_login_form() {
     <?php
 }
 add_action('login_form', 'acemedia_add_2fa_to_login_form');
+
+
+
+/**
+ * Add a toggle setting to use the site logo on the login page.
+ */
+function acemedia_add_site_logo_setting() {
+    register_setting('acemedia_login_block_options_group', 'acemedia_use_site_logo', [
+        'type' => 'boolean',
+        'description' => __('Use site logo on login page', 'acemedia-login-block'),
+        'sanitize_callback' => 'rest_sanitize_boolean',
+        'default' => false,
+    ]);
+}
+add_action('admin_init', 'acemedia_add_site_logo_setting');
+
+/**
+ * Add the toggle option to the settings page.
+ */
+function acemedia_render_site_logo_setting() {
+    $use_site_logo = get_option('acemedia_use_site_logo', false);
+    ?>
+    <tr valign="top">
+        <th scope="row"><?php esc_html_e('Use Site Logo on Login Page', 'acemedia-login-block'); ?></th>
+        <td>
+            <label>
+                <input type="checkbox" name="acemedia_use_site_logo" value="1" <?php checked($use_site_logo, true); ?> />
+                <?php esc_html_e('Enable', 'acemedia-login-block'); ?>
+            </label>
+        </td>
+    </tr>
+    <?php
+}
+add_action('acemedia_login_block_render_settings_page', 'acemedia_render_site_logo_setting');
+
+/**
+ * Use the site logo on the login page if enabled.
+ */
+function acemedia_use_site_logo() {
+    if (get_option('acemedia_use_site_logo', false)) {
+        $custom_logo_id = get_theme_mod('custom_logo');
+        if ($custom_logo_id) {
+            $logo_url = wp_get_attachment_image_url($custom_logo_id, 'full');
+            if ($logo_url) {
+                ?>
+                <style type="text/css">
+                    body.login h1 a {
+                        background-image: url('<?php echo esc_url($logo_url); ?>');
+                        background-size: contain;
+                        width: auto;
+                        height: 80px;
+                    }
+                </style>
+                <?php
+            }
+        }
+    }
+}
+add_action('login_enqueue_scripts', 'acemedia_use_site_logo');
