@@ -8,6 +8,11 @@
 if (!defined('ABSPATH')) {
     exit;
 }
+
+
+use AceLoginBlock\Auth\Two_Factor;
+
+
 ?>
 
 <!-- Overlay and Warning -->
@@ -70,8 +75,7 @@ if (!defined('ABSPATH')) {
             <tr id="acemedia_2fa_qr_row" style="display: none;">
                 <th><label for="acemedia_2fa_qr"><?php esc_html_e('QR Code', 'acemedia-login-block'); ?></label></th>
                 <td>
-                    <?php $qr_code_url = acemedia_generate_qr_code(get_current_user_id()); ?>
-                    <img src="<?php echo esc_url($qr_code_url); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
+                    <img src="<?php echo esc_attr(Two_Factor::generate_qr_code(get_current_user_id())); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
                     <p class="description"><?php esc_html_e('Scan this QR code with your authentication app to get started.', 'acemedia-login-block'); ?></p>
                 </td>
             </tr>
@@ -98,11 +102,8 @@ jQuery(document).ready(function($) {
         const qrRow = $('#acemedia_2fa_qr_row');
         if (this.value === 'auth_app') {
             qrRow.show();
-            // Refresh QR code
-            const qrImage = qrRow.find('img');
-            if (qrImage.length) {
-                qrImage.attr('src', qrImage.attr('src').split('?')[0] + '?' + new Date().getTime());
-            }
+            // For data URI we don't need to refresh by appending timestamp
+            // Just show the QR code
         } else {
             qrRow.hide();
         }

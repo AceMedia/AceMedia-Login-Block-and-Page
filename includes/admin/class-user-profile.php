@@ -57,8 +57,7 @@ class User_Profile {
             <tr id="acemedia_2fa_qr_row" style="display: <?php echo ($is_2fa_enabled && $selected_method === 'auth_app') ? 'table-row' : 'none'; ?>">
                 <th><label for="acemedia_2fa_qr"><?php esc_html_e('2FA QR Code', 'acemedia-login-block'); ?></label></th>
                 <td>
-                    <?php $qr_code_url = Two_Factor::generate_qr_code($user->ID); ?>
-                    <img src="<?php echo esc_url($qr_code_url); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
+                    <img src="<?php echo esc_attr(Two_Factor::generate_qr_code($user->ID)); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
                     <p class="description"><?php esc_html_e('Scan this QR code with your authentication app.', 'acemedia-login-block'); ?></p>
                 </td>
             </tr>

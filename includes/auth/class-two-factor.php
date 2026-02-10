@@ -340,15 +340,9 @@ class Two_Factor {
 
         $writer = new PngWriter();
         $result = $writer->write($qrCode);
-
-        $qrcodes_dir = ACEMEDIA_LOGIN_BLOCK_URL . 'qrcodes/';
-        if (!file_exists($qrcodes_dir)) {
-            mkdir($qrcodes_dir, 0755, true);
-        }
-
-        $result->saveToFile($qrcodes_dir . $user_id . '.png');
-
-        return $qrcodes_dir . $user_id . '.png';
+        
+        // Return a data URI instead of saving to a file
+        return $result->getDataUri();
     }
 
     /**
@@ -373,13 +367,13 @@ public function acemedia_add_2fa_to_login_form() {
     ?>
     <script type="text/javascript">
         document.addEventListener('DOMContentLoaded', function () {
-            if (!aceLoginBlock.is2FAEnabled) {
+            if (typeof aceLoginBlock === 'undefined' || !aceLoginBlock.check2FAEndpoint || !aceLoginBlock.verify2FAEndpoint) {
                 return;
             }
 
-            const loginButton = document.querySelector('#wp-submit');
-            if (loginButton) {
-                loginButton.addEventListener('click', handleLoginAttempt);
+            const loginForm = document.querySelector('#loginform');
+            if (loginForm) {
+                loginForm.addEventListener('submit', handleLoginAttempt);
             }
 
             function handleLoginAttempt(event) {
@@ -635,6 +629,5 @@ public function acemedia_add_2fa_to_login_form() {
 
 // Initialize the class
 Two_Factor::get_instance();
-
 
 

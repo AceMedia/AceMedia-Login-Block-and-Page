@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
-    if (!aceLoginBlock.is2FAEnabled) {
+    if (typeof aceLoginBlock === 'undefined' || !aceLoginBlock.check2FAEndpoint || !aceLoginBlock.verify2FAEndpoint) {
         return;
     }
 
