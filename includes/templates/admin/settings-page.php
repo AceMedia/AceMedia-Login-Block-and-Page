@@ -33,6 +33,40 @@ $front_end_pages = get_pages();
                 </td>
             </tr>
 
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Login Lockout', 'acemedia-login-block'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="acemedia_login_lockout_enabled" value="1" <?php checked(get_option('acemedia_login_lockout_enabled', true), true); ?> />
+                        <?php esc_html_e('Enable lockout after failed attempts', 'acemedia-login-block'); ?>
+                    </label>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Max Failed Attempts', 'acemedia-login-block'); ?></th>
+                <td>
+                    <input type="number" min="1" name="acemedia_login_lockout_max_attempts" value="<?php echo esc_attr(get_option('acemedia_login_lockout_max_attempts', 5)); ?>" />
+                    <p class="description"><?php esc_html_e('Number of failed attempts before an account is locked.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Attempt Window (minutes)', 'acemedia-login-block'); ?></th>
+                <td>
+                    <input type="number" min="1" name="acemedia_login_lockout_window_minutes" value="<?php echo esc_attr(get_option('acemedia_login_lockout_window_minutes', 15)); ?>" />
+                    <p class="description"><?php esc_html_e('Time window for counting failed attempts.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Lockout Duration (minutes)', 'acemedia-login-block'); ?></th>
+                <td>
+                    <input type="number" min="1" name="acemedia_login_lockout_duration_minutes" value="<?php echo esc_attr(get_option('acemedia_login_lockout_duration_minutes', 30)); ?>" />
+                    <p class="description"><?php esc_html_e('How long the account stays locked.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
             <?php
             $roles = wp_roles()->roles;
             foreach ($roles as $role => $details) :

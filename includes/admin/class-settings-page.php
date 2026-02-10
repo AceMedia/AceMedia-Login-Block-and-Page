@@ -52,6 +52,34 @@ class Settings_Page {
             ]);
         }
 
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_enabled', [
+            'type' => 'boolean',
+            'description' => __('Enable login lockout', 'acemedia-login-block'),
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => true,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_max_attempts', [
+            'type' => 'integer',
+            'description' => __('Maximum failed login attempts before lockout', 'acemedia-login-block'),
+            'sanitize_callback' => 'absint',
+            'default' => 5,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_window_minutes', [
+            'type' => 'integer',
+            'description' => __('Failed login attempt window (minutes)', 'acemedia-login-block'),
+            'sanitize_callback' => 'absint',
+            'default' => 15,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_duration_minutes', [
+            'type' => 'integer',
+            'description' => __('Lockout duration (minutes)', 'acemedia-login-block'),
+            'sanitize_callback' => 'absint',
+            'default' => 30,
+        ]);
+
         // Add the settings page
         add_options_page(
             __('Ace Login Block Settings', 'acemedia-login-block'),

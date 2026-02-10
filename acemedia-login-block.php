@@ -42,6 +42,7 @@ require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/admin/class-user-profile.php'
 
 // Auth includes
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-login-handler.php';
+require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-login-lockout.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-two-factor.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-backup-codes.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-authentication.php';
