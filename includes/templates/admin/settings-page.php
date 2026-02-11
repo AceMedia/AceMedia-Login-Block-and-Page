@@ -34,6 +34,16 @@ $front_end_pages = get_pages();
             </tr>
 
             <tr valign="top">
+                <th scope="row"><?php esc_html_e('Passkeys / Security Keys', 'acemedia-login-block'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="acemedia_passkeys_enabled" value="1" <?php checked(get_option('acemedia_passkeys_enabled', true), true); ?> />
+                        <?php esc_html_e('Enable passkeys on wp-login.php', 'acemedia-login-block'); ?>
+                    </label>
+                </td>
+            </tr>
+
+            <tr valign="top">
                 <th scope="row"><?php esc_html_e('Login Lockout', 'acemedia-login-block'); ?></th>
                 <td>
                     <label>

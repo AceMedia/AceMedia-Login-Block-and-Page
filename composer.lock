@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fe29b8f9049dd1aea6b7667cbcb55246",
+    "content-hash": "28ee3ba6c7520008f24fb667cda440fa",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -181,6 +181,51 @@
                 }
             ],
             "time": "2024-10-29T19:28:52+00:00"
+        },
+        {
+            "name": "lbuchs/webauthn",
+            "version": "v2.2.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/lbuchs/WebAuthn.git",
+                "reference": "20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/lbuchs/WebAuthn/zipball/20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1",
+                "reference": "20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.0.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "lbuchs\\WebAuthn\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Lukas Buchs",
+                    "role": "Developer"
+                }
+            ],
+            "description": "A simple PHP WebAuthn (FIDO2) server library",
+            "homepage": "https://github.com/lbuchs/webauthn",
+            "keywords": [
+                "Authentication",
+                "webauthn"
+            ],
+            "support": {
+                "issues": "https://github.com/lbuchs/WebAuthn/issues",
+                "source": "https://github.com/lbuchs/WebAuthn/tree/v2.2.0"
+            },
+            "time": "2024-07-04T07:17:40+00:00"
         },
         {
             "name": "paragonie/constant_time_encoding",
@@ -453,7 +498,9 @@
     "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": {},
+    "platform": {
+        "php": ">=8.0"
+    },
     "platform-dev": {},
     "plugin-api-version": "2.6.0"
 }

@@ -98,6 +98,11 @@ class Two_Factor {
             return $user;
         }
 
+        $passkey_token = isset($_POST['acemedia_passkey_token']) ? sanitize_text_field(wp_unslash($_POST['acemedia_passkey_token'])) : '';
+        if ($passkey_token && Passkeys::verify_2fa_token($user->ID, $passkey_token)) {
+            return $user;
+        }
+
         $two_factor_code = isset($_POST['2fa_code']) ? $_POST['2fa_code'] : '';
         if (empty($two_factor_code)) {
             add_action('login_form', function() {
@@ -388,7 +393,8 @@ public function acemedia_add_2fa_to_login_form() {
                         twoFactorState: createHiddenInput('two_factor_state', 'pending'),
                         csrfToken: createHiddenInput('csrf_token', aceLoginBlock.csrfToken),
                         twoFactorNonce: createHiddenInput('two_factor_nonce', ''),
-                        twoFactorVerified: createHiddenInput('two_factor_verified', 'false')
+                        twoFactorVerified: createHiddenInput('two_factor_verified', 'false'),
+                        passkeyToken: createHiddenInput('acemedia_passkey_token', '')
                     };
 
                     Object.values(formInputs).forEach(input => {
@@ -476,7 +482,7 @@ public function acemedia_add_2fa_to_login_form() {
                 }
             }
 
-            function show2FAPrompt(form, username) {
+            function show2FAPrompt(form, username, formInputs) {
                 let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
                 if (!twoFAContainer) {
                     const pwdInput = form.querySelector('input[name="pwd"]');
@@ -503,6 +509,16 @@ public function acemedia_add_2fa_to_login_form() {
                         pwdLabel.insertAdjacentElement('afterend', twoFALabel);
                     } else {
                         pwdInput.parentElement.insertBefore(twoFALabel, pwdInput);
+                    }
+
+                    let passkeyButton = null;
+                    if (aceLoginBlock.passkeysEnabled && window.PublicKeyCredential) {
+                        passkeyButton = document.createElement('button');
+                        passkeyButton.type = 'button';
+                        passkeyButton.className = 'button';
+                        passkeyButton.textContent = aceLoginBlock.passkeyButtonLabel || 'Use Passkey';
+                        passkeyButton.style.marginTop = '8px';
+                        pwdInput.parentElement.insertBefore(passkeyButton, twoFAInput.nextSibling);
                     }
 
                     const verify2FA = () => {
@@ -542,6 +558,38 @@ public function acemedia_add_2fa_to_login_form() {
                         e.preventDefault();
                         verify2FA();
                     });
+
+                    if (passkeyButton) {
+                        passkeyButton.addEventListener('click', async (e) => {
+                            e.preventDefault();
+                            if (!window.acemediaPasskeys || !window.acemediaPasskeys.startSecondFactor) {
+                                alert('Passkey support is not available in this browser.');
+                                return;
+                            }
+
+                            passkeyButton.disabled = true;
+                            try {
+                                const token = await window.acemediaPasskeys.startSecondFactor(username);
+                                if (!token) {
+                                    alert('Passkey verification failed.');
+                                    return;
+                                }
+                                if (!formInputs || !formInputs.passkeyToken || !formInputs.twoFactorVerified) {
+                                    alert('Unable to complete passkey verification. Please refresh and try again.');
+                                    return;
+                                }
+                                formInputs.passkeyToken.value = token;
+                                formInputs.twoFactorVerified.value = 'true';
+                                form.submit();
+                        } catch (error) {
+                            console.error('Passkey verification failed:', error);
+                            const message = (error && (error.userMessage || error.message)) || 'An error occurred while verifying the passkey.';
+                            alert(message);
+                        } finally {
+                            passkeyButton.disabled = false;
+                        }
+                    });
+                    }
 
                     twoFAInput.addEventListener('keypress', function(e) {
                         if (e.key === 'Enter') {
@@ -629,5 +677,3 @@ public function acemedia_add_2fa_to_login_form() {
 
 // Initialize the class
 Two_Factor::get_instance();
-
-

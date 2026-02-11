@@ -28,9 +28,12 @@ class User_Profile {
      * Add 2FA fields to user profile
      */
     public function add_2fa_fields($user) {
-        $is_2fa_enabled_global = (bool) get_option('acemedia_2fa_enabled', false);
-        if (!$is_2fa_enabled_global) {
-            return;
+        $role_requires_2fa = false;
+        foreach ($user->roles as $role) {
+            if (get_option("acemedia_2fa_enabled_{$role}", false)) {
+                $role_requires_2fa = true;
+                break;
+            }
         }
 
         $is_2fa_enabled = get_user_meta($user->ID, '_acemedia_2fa_enabled', true);
@@ -38,6 +41,9 @@ class User_Profile {
         $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true) ?: 'email';
         ?>
         <h3><?php esc_html_e('Two-Factor Authentication', 'acemedia-login-block'); ?></h3>
+        <?php if ($role_requires_2fa): ?>
+            <p class="description"><?php esc_html_e('Your role requires 2FA. Please enable and complete setup below.', 'acemedia-login-block'); ?></p>
+        <?php endif; ?>
         <table class="form-table">
             <tr>
                 <th><label for="acemedia_2fa_enabled"><?php esc_html_e('Enable 2FA', 'acemedia-login-block'); ?></label></th>
@@ -122,14 +128,6 @@ class User_Profile {
     public function save_2fa_fields($user_id) {
         if (!current_user_can('edit_user', $user_id)) {
             return false;
-        }
-
-        $is_2fa_enabled_global = (bool) get_option('acemedia_2fa_enabled', false);
-        if (!$is_2fa_enabled_global) {
-            delete_user_meta($user_id, '_acemedia_2fa_enabled');
-            delete_user_meta($user_id, '_acemedia_2fa_method');
-            delete_user_meta($user_id, '_acemedia_2fa_secret');
-            return;
         }
 
         $is_2fa_enabled = isset($_POST['acemedia_2fa_enabled']) ? 1 : 0;

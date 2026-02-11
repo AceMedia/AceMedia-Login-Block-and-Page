@@ -4,7 +4,7 @@
  * Description:       A block to replace the WordPress login page using a custom page and its template from the site editor.
  * Requires at least: 6.6
  * Tested up to:      6.7
- * Requires PHP:      7.2
+ * Requires PHP:      8.0
  * Version:           0.426.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
@@ -43,6 +43,7 @@ require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/admin/class-user-profile.php'
 // Auth includes
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-login-handler.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-login-lockout.php';
+require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-passkeys.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-two-factor.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-backup-codes.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/auth/class-authentication.php';
@@ -64,18 +65,6 @@ require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/utils/class-security.php';
 // Frontend includes
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/frontend/class-assets.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/frontend/class-login-page.php';
-
-
-
-/**
- * Registers the block and its settings.
- */
-function acemedia_create_block_login_block_init() {
-    register_block_type( __DIR__ . '/build/login-block' );
-    register_block_type( __DIR__ . '/build/username-block' );
-    register_block_type( __DIR__ . '/build/password-block' );
-}
-add_action( 'init', 'acemedia_create_block_login_block_init' );
 
 
 
@@ -341,12 +330,15 @@ function acemedia_render_2fa_block($attributes) {
 
 
 // Register setting for selecting the 2FA method
-register_setting('acemedia_login_block_options_group', 'acemedia_2fa_method', [
-    'type' => 'string',
-    'description' => __('2FA Method', 'acemedia-login-block'),
-    'sanitize_callback' => 'sanitize_text_field',
-    'default' => 'email', // Default to email-based 2FA
-]);
+function acemedia_register_2fa_method_setting() {
+    register_setting('acemedia_login_block_options_group', 'acemedia_2fa_method', [
+        'type' => 'string',
+        'description' => __('2FA Method', 'acemedia-login-block'),
+        'sanitize_callback' => 'sanitize_text_field',
+        'default' => 'email', // Default to email-based 2FA
+    ]);
+}
+add_action('admin_init', 'acemedia_register_2fa_method_setting');
 
 
 
@@ -388,17 +380,23 @@ function acemedia_enqueue_admin_login_script() {
 
         // Fetch the current value of the 2FA setting
         $is_2fa_enabled = (bool) get_option('acemedia_2fa_enabled', false);
+        $passkeys_enabled = (bool) get_option('acemedia_passkeys_enabled', true);
+        $passkeys_supported = $passkeys_enabled && class_exists('\lbuchs\WebAuthn\WebAuthn');
 
         wp_localize_script('acemedia-login-frontend', 'aceLoginBlock', [
             'loginUrl' => site_url('wp-login.php'),
             'userRoles' => wp_get_current_user()->roles,
             'redirectUrl' => site_url('/wp-admin'),
             'is2FAEnabled' => $is_2fa_enabled,
+            'passkeysEnabled' => $passkeys_supported,
             'twoFALabel' => __('Enter 2FA Code', 'acemedia-login-block'),
             'twoFAPlaceholder' => __('2FA Code', 'acemedia-login-block'),
             'submit2FA' => __('Verify 2FA', 'acemedia-login-block'),
             'verify2FAEndpoint' => rest_url('acemedia/v1/verify-2fa'),
             'check2FAEndpoint' => rest_url('acemedia/v1/check-2fa'),
+            'passkeyLoginOptionsEndpoint' => rest_url('acemedia/v1/passkeys/login-options'),
+            'passkeyLoginEndpoint' => rest_url('acemedia/v1/passkeys/login'),
+            'passkeyButtonLabel' => __('Use Passkey', 'acemedia-login-block'),
             'nonce' => wp_create_nonce('wp_rest'),
         ]);
     }

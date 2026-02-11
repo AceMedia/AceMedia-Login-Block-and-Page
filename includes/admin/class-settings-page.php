@@ -100,6 +100,13 @@ class Settings_Page {
             'sanitize_callback' => 'rest_sanitize_boolean',
             'default' => false,
         ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_passkeys_enabled', [
+            'type' => 'boolean',
+            'description' => __('Enable passkeys on the login page', 'acemedia-login-block'),
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => true,
+        ]);
     }
 
     /**
