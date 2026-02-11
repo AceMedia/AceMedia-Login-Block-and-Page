@@ -40,6 +40,34 @@ $front_end_pages = get_pages();
                         <input type="checkbox" name="acemedia_passkeys_enabled" value="1" <?php checked(get_option('acemedia_passkeys_enabled', true), true); ?> />
                         <?php esc_html_e('Enable passkeys on wp-login.php', 'acemedia-login-block'); ?>
                     </label>
+                    <p style="margin-top: 8px;">
+                        <label for="acemedia_passkeys_rp_id">
+                            <?php esc_html_e('RP ID override (optional)', 'acemedia-login-block'); ?>
+                        </label>
+                        <input type="text" id="acemedia_passkeys_rp_id" name="acemedia_passkeys_rp_id" value="<?php echo esc_attr(get_option('acemedia_passkeys_rp_id', '')); ?>" placeholder="example.com" />
+                    </p>
+                    <p>
+                        <label for="acemedia_passkeys_attestation">
+                            <?php esc_html_e('Attestation preference', 'acemedia-login-block'); ?>
+                        </label>
+                        <select id="acemedia_passkeys_attestation" name="acemedia_passkeys_attestation">
+                            <?php
+                            $attestation = get_option('acemedia_passkeys_attestation', 'preferred');
+                            $attestation_options = [
+                                'preferred' => __('Preferred', 'acemedia-login-block'),
+                                'none' => __('None', 'acemedia-login-block'),
+                                'indirect' => __('Indirect', 'acemedia-login-block'),
+                                'direct' => __('Direct', 'acemedia-login-block'),
+                                'enterprise' => __('Enterprise', 'acemedia-login-block'),
+                            ];
+                            foreach ($attestation_options as $value => $label) :
+                            ?>
+                                <option value="<?php echo esc_attr($value); ?>" <?php selected($attestation, $value); ?>>
+                                    <?php echo esc_html($label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </p>
                 </td>
             </tr>
 
@@ -82,6 +110,7 @@ $front_end_pages = get_pages();
             foreach ($roles as $role => $details) :
                 $redirect_url = get_option("acemedia_login_block_redirect_{$role}", '');
                 $is_2fa_enabled = get_option("acemedia_2fa_enabled_{$role}", false);
+                $allow_passkey_passwordless = get_option("acemedia_passkey_passwordless_{$role}", false);
             ?>
                 <tr valign="top">
                     <th scope="row"><?php echo esc_html(ucfirst($role)); ?></th>
@@ -116,10 +145,17 @@ $front_end_pages = get_pages();
                             <input type="checkbox" name="<?php echo esc_attr("acemedia_2fa_enabled_{$role}"); ?>" value="1" <?php checked($is_2fa_enabled, true); ?>>
                             <?php esc_html_e('Requires 2FA', 'acemedia-login-block'); ?>
                         </label>
+                        <label style="margin-left: 8px;">
+                            <input type="checkbox" name="<?php echo esc_attr("acemedia_passkey_passwordless_{$role}"); ?>" value="1" <?php checked($allow_passkey_passwordless, true); ?>>
+                            <?php esc_html_e('Allow passkey passwordless', 'acemedia-login-block'); ?>
+                        </label>
                     </td>
                 </tr>
             <?php endforeach; ?>
         </table>
+        <p class="description">
+            <?php esc_html_e('Remembered devices only skip the 2FA step. Users still need their password.', 'acemedia-login-block'); ?>
+        </p>
         <?php submit_button(); ?>
     </form>
 

@@ -396,7 +396,9 @@ function acemedia_enqueue_admin_login_script() {
             'check2FAEndpoint' => rest_url('acemedia/v1/check-2fa'),
             'passkeyLoginOptionsEndpoint' => rest_url('acemedia/v1/passkeys/login-options'),
             'passkeyLoginEndpoint' => rest_url('acemedia/v1/passkeys/login'),
-            'passkeyButtonLabel' => __('Use Passkey', 'acemedia-login-block'),
+            'passkeyPasswordLabel' => __('Use Passkey for Password', 'acemedia-login-block'),
+            'passkeyTwoFALabel' => __('Use Passkey for 2FA', 'acemedia-login-block'),
+            'rememberDeviceLabel' => __('Remember this device for 2FA for 30 days', 'acemedia-login-block'),
             'nonce' => wp_create_nonce('wp_rest'),
         ]);
     }

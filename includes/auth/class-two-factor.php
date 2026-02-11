@@ -15,6 +15,9 @@ if (!defined('ABSPATH')) {
 
 class Two_Factor {
     private static $instance = null;
+    private const TRUSTED_META_KEY = '_acemedia_2fa_trusted_devices';
+    private const TRUSTED_COOKIE_PREFIX = 'acemedia_2fa_trusted';
+    private const TRUSTED_TTL = 30 * DAY_IN_SECONDS;
 
     /**
      * Get the instance of the class
@@ -98,8 +101,13 @@ class Two_Factor {
             return $user;
         }
 
+        if ($this->is_trusted_device($user->ID)) {
+            return $user;
+        }
+
         $passkey_token = isset($_POST['acemedia_passkey_token']) ? sanitize_text_field(wp_unslash($_POST['acemedia_passkey_token'])) : '';
         if ($passkey_token && Passkeys::verify_2fa_token($user->ID, $passkey_token)) {
+            $this->maybe_trust_device($user->ID);
             return $user;
         }
 
@@ -123,6 +131,8 @@ class Two_Factor {
         if (is_wp_error($verification_result) || !$verification_result['success']) {
             return new \WP_Error('2fa_invalid', __('Invalid two-factor authentication code.', 'acemedia-login-block'));
         }
+
+        $this->maybe_trust_device($user->ID);
 
         return $user;
     }
@@ -249,10 +259,16 @@ class Two_Factor {
         $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
         $needs_setup = $needs_2fa && (!$is_2fa_enabled || !get_user_meta($user->ID, '_acemedia_2fa_setup_complete', true));
 
+        $trusted_device = false;
+        if ($needs_2fa && !$needs_setup) {
+            $trusted_device = $this->is_trusted_device($user->ID);
+        }
+
         return [
-            'is2FAEnabled' => $is_2fa_enabled && $needs_2fa,
+            'is2FAEnabled' => $is_2fa_enabled && $needs_2fa && !$trusted_device,
             'method' => $selected_method,
             'needs2FASetup' => $needs_setup,
+            'trustedDevice' => $trusted_device,
         ];
     }
 
@@ -500,25 +516,45 @@ public function acemedia_add_2fa_to_login_form() {
                     twoFAInput.placeholder = aceLoginBlock.twoFAPlaceholder || 'Authentication Code';
                     twoFAInput.required = true;
 
+                    const rememberLabel = document.createElement('label');
+                    rememberLabel.style.display = 'block';
+                    rememberLabel.style.marginTop = '8px';
+                    const rememberCheckbox = document.createElement('input');
+                    rememberCheckbox.type = 'checkbox';
+                    rememberCheckbox.name = 'acemedia_trust_device';
+                    rememberCheckbox.value = '1';
+                    rememberLabel.appendChild(rememberCheckbox);
+                    rememberLabel.appendChild(document.createTextNode(' ' + (aceLoginBlock.rememberDeviceLabel || 'Remember this device for 2FA for 30 days')));
+
                     pwdInput.style.display = 'none';
                     if (pwdLabel) pwdLabel.style.display = 'none';
                     if (pwdShowToggle) pwdShowToggle.style.display = 'none';
 
                     pwdInput.insertAdjacentElement('afterend', twoFAInput);
+                    pwdInput.parentElement.insertBefore(rememberLabel, twoFAInput.nextSibling);
                     if (pwdLabel) {
                         pwdLabel.insertAdjacentElement('afterend', twoFALabel);
                     } else {
                         pwdInput.parentElement.insertBefore(twoFALabel, pwdInput);
                     }
 
+                    const insertAfterNode = rememberLabel || twoFAInput;
                     let passkeyButton = null;
                     if (aceLoginBlock.passkeysEnabled && window.PublicKeyCredential) {
-                        passkeyButton = document.createElement('button');
-                        passkeyButton.type = 'button';
-                        passkeyButton.className = 'button';
-                        passkeyButton.textContent = aceLoginBlock.passkeyButtonLabel || 'Use Passkey';
+                        passkeyButton = document.getElementById('acemedia-passkey-login');
+                        if (!passkeyButton) {
+                            passkeyButton = document.createElement('button');
+                            passkeyButton.id = 'acemedia-passkey-login';
+                            passkeyButton.type = 'button';
+                            passkeyButton.className = 'button';
+                        }
+
+                        const passkeyLabel = aceLoginBlock.passkeyTwoFALabel
+                            || (passkeyButton.dataset ? passkeyButton.dataset.passkeyTwoFALabel : '')
+                            || 'Use Passkey for 2FA';
+                        passkeyButton.textContent = passkeyLabel;
                         passkeyButton.style.marginTop = '8px';
-                        pwdInput.parentElement.insertBefore(passkeyButton, twoFAInput.nextSibling);
+                        pwdInput.parentElement.insertBefore(passkeyButton, insertAfterNode.nextSibling);
                     }
 
                     const verify2FA = () => {
@@ -603,6 +639,202 @@ public function acemedia_add_2fa_to_login_form() {
     </script>
     <?php
 }
+
+    private function maybe_trust_device($user_id) {
+        if (!isset($_POST['acemedia_trust_device'])) {
+            return;
+        }
+
+        $should_trust = sanitize_text_field(wp_unslash($_POST['acemedia_trust_device']));
+        if (!in_array($should_trust, ['1', 'true', 'yes'], true)) {
+            return;
+        }
+
+        $this->remember_trusted_device($user_id);
+    }
+
+    private function remember_trusted_device($user_id) {
+        $token = bin2hex(random_bytes(32));
+        $hash = wp_hash_password($token);
+        $now = time();
+        $expires = $now + self::TRUSTED_TTL;
+
+        $devices = $this->get_trusted_devices($user_id);
+        $devices[] = [
+            'hash' => $hash,
+            'created' => $now,
+            'expires' => $expires,
+            'last_used' => $now,
+            'user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? substr(sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])), 0, 200) : '',
+        ];
+
+        $devices = $this->trim_trusted_devices($devices);
+        update_user_meta($user_id, self::TRUSTED_META_KEY, $devices);
+
+        $this->set_trusted_cookie($token, $expires);
+    }
+
+    private function is_trusted_device($user_id) {
+        $token = $this->get_trusted_cookie();
+        if (!$token) {
+            return false;
+        }
+
+        $devices = $this->get_trusted_devices($user_id);
+        if (empty($devices)) {
+            return false;
+        }
+
+        $now = time();
+        $updated = false;
+
+        foreach ($devices as $index => $device) {
+            if (empty($device['expires']) || (int) $device['expires'] < $now) {
+                unset($devices[$index]);
+                $updated = true;
+                continue;
+            }
+
+            if (!empty($device['hash']) && wp_check_password($token, $device['hash'])) {
+                $devices[$index]['last_used'] = $now;
+                $updated = true;
+                update_user_meta($user_id, self::TRUSTED_META_KEY, array_values($devices));
+                return true;
+            }
+        }
+
+        if ($updated) {
+            update_user_meta($user_id, self::TRUSTED_META_KEY, array_values($devices));
+        }
+
+        return false;
+    }
+
+    private function get_trusted_cookie() {
+        $cookie_name = $this->get_trusted_cookie_name();
+        if (!isset($_COOKIE[$cookie_name])) {
+            return '';
+        }
+
+        return sanitize_text_field(wp_unslash($_COOKIE[$cookie_name]));
+    }
+
+    private function set_trusted_cookie($token, $expires) {
+        $cookie_name = $this->get_trusted_cookie_name();
+        $domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
+        $secure = is_ssl();
+
+        $options = [
+            'expires' => $expires,
+            'path' => COOKIEPATH ? COOKIEPATH : '/',
+            'domain' => $domain,
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ];
+
+        setcookie($cookie_name, $token, $options);
+
+        if (defined('SITECOOKIEPATH') && SITECOOKIEPATH && SITECOOKIEPATH !== COOKIEPATH) {
+            $options['path'] = SITECOOKIEPATH;
+            setcookie($cookie_name, $token, $options);
+        }
+    }
+
+    private function get_trusted_cookie_name() {
+        $suffix = defined('COOKIEHASH') && COOKIEHASH ? COOKIEHASH : md5(get_site_url());
+        return self::TRUSTED_COOKIE_PREFIX . '_' . $suffix;
+    }
+
+    private function get_trusted_devices($user_id) {
+        $devices = get_user_meta($user_id, self::TRUSTED_META_KEY, true);
+        return is_array($devices) ? $devices : [];
+    }
+
+    private function trim_trusted_devices(array $devices) {
+        $now = time();
+        $filtered = [];
+
+        foreach ($devices as $device) {
+            if (empty($device['expires']) || (int) $device['expires'] < $now) {
+                continue;
+            }
+            if (empty($device['hash'])) {
+                continue;
+            }
+            $filtered[] = $device;
+        }
+
+        usort($filtered, function($a, $b) {
+            return (int) ($b['last_used'] ?? 0) <=> (int) ($a['last_used'] ?? 0);
+        });
+
+        return array_slice($filtered, 0, 10);
+    }
+
+    public static function forget_trusted_device($user_id = null) {
+        $token = self::get_trusted_cookie_value();
+        if ($token && $user_id) {
+            $devices = self::get_trusted_devices_static($user_id);
+            $updated = [];
+
+            foreach ($devices as $device) {
+                if (!empty($device['hash']) && wp_check_password($token, $device['hash'])) {
+                    continue;
+                }
+                $updated[] = $device;
+            }
+
+            update_user_meta($user_id, self::TRUSTED_META_KEY, $updated);
+        }
+
+        self::clear_trusted_cookie();
+    }
+
+    public static function has_trusted_cookie() {
+        return (bool) self::get_trusted_cookie_value();
+    }
+
+    private static function get_trusted_cookie_value() {
+        $cookie_name = self::get_trusted_cookie_name_static();
+        if (!isset($_COOKIE[$cookie_name])) {
+            return '';
+        }
+
+        return sanitize_text_field(wp_unslash($_COOKIE[$cookie_name]));
+    }
+
+    private static function clear_trusted_cookie() {
+        $cookie_name = self::get_trusted_cookie_name_static();
+        $domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
+        $secure = is_ssl();
+
+        $options = [
+            'expires' => time() - DAY_IN_SECONDS,
+            'path' => COOKIEPATH ? COOKIEPATH : '/',
+            'domain' => $domain,
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ];
+
+        setcookie($cookie_name, '', $options);
+
+        if (defined('SITECOOKIEPATH') && SITECOOKIEPATH && SITECOOKIEPATH !== COOKIEPATH) {
+            $options['path'] = SITECOOKIEPATH;
+            setcookie($cookie_name, '', $options);
+        }
+    }
+
+    private static function get_trusted_cookie_name_static() {
+        $suffix = defined('COOKIEHASH') && COOKIEHASH ? COOKIEHASH : md5(get_site_url());
+        return self::TRUSTED_COOKIE_PREFIX . '_' . $suffix;
+    }
+
+    private static function get_trusted_devices_static($user_id) {
+        $devices = get_user_meta($user_id, self::TRUSTED_META_KEY, true);
+        return is_array($devices) ? $devices : [];
+    }
 
 
     /**

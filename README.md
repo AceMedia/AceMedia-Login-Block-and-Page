@@ -4,6 +4,7 @@
 **Tags:** login, block, custom login, WordPress, Gutenberg, security  
 **Requires at least:** 6.3 
 **Tested up to:** 6.7  
+**Requires PHP:** 8.0  
 **Stable tag:** 0.426.0  
 **License:** GPLv2 or later  
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html  
@@ -20,6 +21,12 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 - Allow the default WordPress login functionality for POST requests to ensure smooth login submissions.
 - Customize redirects and add additional fields or branding elements to the login page.
 - Prevent further execution of the default `wp-login.php` after your custom login template loads.
+- Role-based redirects and per-role 2FA requirements.
+- Passkeys (security keys) for passwordless login and as a 2FA bypass.
+- Email and authenticator app 2FA, plus backup codes.
+- Remembered devices that skip 2FA only (password still required).
+- Login lockout after repeated failed attempts.
+- Passkey policy settings: RP ID override, attestation preference, and per-role passwordless control.
 
 Ace Login Block provides a seamless way to craft unique, branded login experiences while ensuring compatibility with WordPress’s login handling.
 
@@ -56,6 +63,14 @@ Yes, you can add custom blocks, text, images, or any other elements within the b
 ### What happens if I disable the plugin?
 
 If you disable Ace Login Block, WordPress will revert to the default `wp-login.php` page for login access.
+
+### Do remembered devices bypass my password?
+
+No. Remembered devices only skip the 2FA step. Password entry is still required.
+
+### Do passkeys require HTTPS?
+
+Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 
 ## Screenshots
 

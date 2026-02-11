@@ -137,6 +137,7 @@ class User_Profile {
         if (!$is_2fa_enabled) {
             delete_user_meta($user_id, '_acemedia_2fa_setup_complete');
             delete_user_meta($user_id, '_acemedia_2fa_secret');
+            delete_user_meta($user_id, '_acemedia_2fa_trusted_devices');
         }
 
         $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field($_POST['acemedia_2fa_method']) : 'email';

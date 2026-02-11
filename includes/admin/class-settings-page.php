@@ -50,6 +50,13 @@ class Settings_Page {
                 'description' => sprintf(__('Enable 2FA for %s role', 'acemedia-login-block'), $details['name']),
                 'default' => false,
             ]);
+
+            $role_passkey_passwordless_key = "acemedia_passkey_passwordless_{$role}";
+            register_setting('acemedia_login_block_options_group', $role_passkey_passwordless_key, [
+                'type' => 'boolean',
+                'description' => sprintf(__('Allow passkey passwordless login for %s role', 'acemedia-login-block'), $details['name']),
+                'default' => false,
+            ]);
         }
 
         register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_enabled', [
@@ -106,6 +113,20 @@ class Settings_Page {
             'description' => __('Enable passkeys on the login page', 'acemedia-login-block'),
             'sanitize_callback' => 'rest_sanitize_boolean',
             'default' => true,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_passkeys_rp_id', [
+            'type' => 'string',
+            'description' => __('Passkeys RP ID override (optional)', 'acemedia-login-block'),
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => '',
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_passkeys_attestation', [
+            'type' => 'string',
+            'description' => __('Passkeys attestation preference', 'acemedia-login-block'),
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => 'preferred',
         ]);
     }
 

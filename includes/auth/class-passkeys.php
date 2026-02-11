@@ -60,12 +60,18 @@ class Passkeys {
         ?>
         <p class="acemedia-passkey-login" style="margin-top: 12px;">
             <button type="button" class="button button-secondary" id="acemedia-passkey-login">
-                <?php esc_html_e('Use Passkey / Security Key', 'acemedia-login-block'); ?>
+                <?php esc_html_e('Use Passkey for Password', 'acemedia-login-block'); ?>
             </button>
             <span class="description" id="acemedia-passkey-message" style="display: block; margin-top: 6px;"></span>
         </p>
         <script type="text/javascript">
             (function() {
+                const passkeyPasswordLabel = (window.aceLoginBlock && aceLoginBlock.passkeyPasswordLabel)
+                    ? aceLoginBlock.passkeyPasswordLabel
+                    : '<?php echo esc_js(__('Use Passkey for Password', 'acemedia-login-block')); ?>';
+                const passkeyTwoFALabel = (window.aceLoginBlock && aceLoginBlock.passkeyTwoFALabel)
+                    ? aceLoginBlock.passkeyTwoFALabel
+                    : '<?php echo esc_js(__('Use Passkey for 2FA', 'acemedia-login-block')); ?>';
                 const passkeysEnabled = <?php echo $this->is_enabled() ? 'true' : 'false'; ?>;
                 const passkeyLoginOptionsEndpoint = '<?php echo esc_url(rest_url('acemedia/v1/passkeys/login-options')); ?>';
                 const passkeyLoginEndpoint = '<?php echo esc_url(rest_url('acemedia/v1/passkeys/login')); ?>';
@@ -77,6 +83,12 @@ class Passkeys {
                 const loginButton = document.getElementById('acemedia-passkey-login');
                 const messageEl = document.getElementById('acemedia-passkey-message');
                 const form = document.getElementById('loginform');
+
+                if (loginButton) {
+                    loginButton.textContent = passkeyPasswordLabel;
+                    loginButton.dataset.passkeyPasswordLabel = passkeyPasswordLabel;
+                    loginButton.dataset.passkeyTwoFALabel = passkeyTwoFALabel;
+                }
 
                 const showMessage = (message, isError = true) => {
                     if (!messageEl) return;
@@ -137,7 +149,42 @@ class Passkeys {
                     },
                 };
 
+                const supportInfoLink = 'https://en.wikipedia.org/wiki/WebAuthn';
+                const showSupportInfo = () => {
+                    const msg = '<?php echo esc_js(__('Touch ID or built-in passkeys are not supported in this browser. You can still use a hardware security key.', 'acemedia-login-block')); ?>';
+                    showMessage(msg + ' ' + supportInfoLink, false);
+                };
+
+                const showInsecureContext = () => {
+                    const msg = '<?php echo esc_js(__('Passkeys require a secure connection (HTTPS or localhost).', 'acemedia-login-block')); ?>';
+                    showMessage(msg + ' ' + supportInfoLink, true);
+                };
+
+                if (!window.PublicKeyCredential) {
+                    showSupportInfo();
+                    return;
+                }
+
+                if (window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+                    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+                        .then((available) => {
+                            if (!available) {
+                                showSupportInfo();
+                            }
+                        })
+                        .catch(() => {
+                            showSupportInfo();
+                        });
+                } else {
+                    showSupportInfo();
+                }
+
                 async function startLogin(username, context) {
+                    if (!window.isSecureContext) {
+                        showInsecureContext();
+                        throw makeError('<?php echo esc_js(__('Insecure context.', 'acemedia-login-block')); ?>', 'insecure_context');
+                    }
+
                     if (!username) {
                         const msg = '<?php echo esc_js(__('Please enter your username first.', 'acemedia-login-block')); ?>';
                         showMessage(msg);
@@ -345,7 +392,17 @@ class Passkeys {
                     }
 
                     const publicKey = normalizePublicKey(data.options);
-                    const credential = await navigator.credentials.create({ publicKey });
+                    let credential = null;
+                    try {
+                        credential = await navigator.credentials.create({ publicKey });
+                    } catch (error) {
+                        if (error && error.name === 'InvalidStateError') {
+                            showStatus('<?php echo esc_js(__('A passkey already exists for this device. Try removing it or use a different authenticator.', 'acemedia-login-block')); ?>', true);
+                            return;
+                        }
+                        showStatus('<?php echo esc_js(__('Passkey registration failed.', 'acemedia-login-block')); ?>', true);
+                        return;
+                    }
 
                     const payload = {
                         state: data.state,
@@ -447,12 +504,13 @@ class Passkeys {
         }
 
         $webauthn = $this->get_webauthn();
+        $attestation = $this->get_attestation_preference();
         $createArgs = $webauthn->getCreateArgs(
             (string) $user->ID,
             $user->user_login,
             $user->display_name ?: $user->user_login,
             60,
-            'preferred',
+            $attestation,
             'preferred',
             null,
             $exclude
@@ -554,7 +612,7 @@ class Passkeys {
         }
 
         $requires_2fa = $this->user_requires_2fa($user);
-        if ($context === 'passwordless' && $requires_2fa) {
+        if ($context === 'passwordless' && $requires_2fa && !$this->user_allows_passwordless($user)) {
             return new \WP_Error('passkey_requires_password', __('This account requires password login before passkey verification.', 'acemedia-login-block'), ['status' => 403]);
         }
 
@@ -749,6 +807,11 @@ class Passkeys {
     }
 
     private function get_rp_id() {
+        $override = get_option('acemedia_passkeys_rp_id', '');
+        if (!empty($override)) {
+            return apply_filters('acemedia_passkeys_rp_id', $override);
+        }
+
         $host = wp_parse_url(home_url(), PHP_URL_HOST);
         if (defined('COOKIE_DOMAIN') && COOKIE_DOMAIN) {
             $host = ltrim(COOKIE_DOMAIN, '.');
@@ -758,6 +821,15 @@ class Passkeys {
 
         $host = $host ?: 'localhost';
         return apply_filters('acemedia_passkeys_rp_id', $host);
+    }
+
+    private function get_attestation_preference() {
+        $value = sanitize_text_field(get_option('acemedia_passkeys_attestation', 'preferred'));
+        $allowed = ['preferred', 'none', 'indirect', 'direct', 'enterprise'];
+        if (!in_array($value, $allowed, true)) {
+            return 'preferred';
+        }
+        return $value;
     }
 
     private function get_passkeys($user_id) {
@@ -801,6 +873,15 @@ class Passkeys {
     private function user_requires_2fa($user) {
         foreach ($user->roles as $role) {
             if (get_option("acemedia_2fa_enabled_{$role}", false)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function user_allows_passwordless($user) {
+        foreach ($user->roles as $role) {
+            if (get_option("acemedia_passkey_passwordless_{$role}", false)) {
                 return true;
             }
         }

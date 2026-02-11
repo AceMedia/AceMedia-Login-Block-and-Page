@@ -137,6 +137,16 @@ document.addEventListener('DOMContentLoaded', function () {
             twoFAInput.placeholder = aceLoginBlock.twoFAPlaceholder || '2FA Code';
             twoFAInput.required = true;
 
+            const rememberLabel = document.createElement('label');
+            rememberLabel.style.display = 'block';
+            rememberLabel.style.marginTop = '8px';
+            const rememberCheckbox = document.createElement('input');
+            rememberCheckbox.type = 'checkbox';
+            rememberCheckbox.name = 'acemedia_trust_device';
+            rememberCheckbox.value = '1';
+            rememberLabel.appendChild(rememberCheckbox);
+            rememberLabel.appendChild(document.createTextNode(' ' + (aceLoginBlock.rememberDeviceLabel || 'Remember this device for 2FA for 30 days')));
+
     
             // Hide password elements
             pwdInput.style.display = 'none';
@@ -145,6 +155,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
             // Insert 2FA elements before password elements
             pwdInput.insertAdjacentElement('beforebegin', twoFAInput);
+            pwdInput.parentElement.insertBefore(rememberLabel, twoFAInput.nextSibling);
             if (pwdLabel) {
                 pwdLabel.insertAdjacentElement('beforebegin', twoFALabel);
             } else {
