@@ -255,6 +255,8 @@ class Two_Factor {
             }
         }
 
+        $passkey_passwordless_allowed = $this->user_allows_passkey_passwordless($user);
+
         $is_2fa_enabled = (bool) get_user_meta($user->ID, '_acemedia_2fa_enabled', true);
         $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
         $needs_setup = $needs_2fa && (!$is_2fa_enabled || !get_user_meta($user->ID, '_acemedia_2fa_setup_complete', true));
@@ -266,10 +268,21 @@ class Two_Factor {
 
         return [
             'is2FAEnabled' => $is_2fa_enabled && $needs_2fa && !$trusted_device,
+            'requires2FA' => $needs_2fa,
+            'passkeyPasswordlessAllowed' => $passkey_passwordless_allowed,
             'method' => $selected_method,
             'needs2FASetup' => $needs_setup,
             'trustedDevice' => $trusted_device,
         ];
+    }
+
+    private function user_allows_passkey_passwordless($user) {
+        foreach ($user->roles as $role) {
+            if (get_option("acemedia_passkey_passwordless_{$role}", false)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -434,7 +447,6 @@ public function acemedia_add_2fa_to_login_form() {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-WP-Nonce': aceLoginBlock.nonce,
                         },
                         body: JSON.stringify({
                             username,
@@ -568,7 +580,6 @@ public function acemedia_add_2fa_to_login_form() {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-WP-Nonce': aceLoginBlock.nonce,
                             },
                             body: JSON.stringify({ code: twoFACode, username }),
                         })

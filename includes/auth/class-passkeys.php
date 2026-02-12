@@ -83,6 +83,9 @@ class Passkeys {
                 const loginButton = document.getElementById('acemedia-passkey-login');
                 const messageEl = document.getElementById('acemedia-passkey-message');
                 const form = document.getElementById('loginform');
+                const usernameInput = form ? form.querySelector('input[name="log"]') : null;
+                const check2FAEndpoint = window.aceLoginBlock ? aceLoginBlock.check2FAEndpoint : null;
+                const restNonce = window.aceLoginBlock ? aceLoginBlock.nonce : '';
 
                 if (loginButton) {
                     loginButton.textContent = passkeyPasswordLabel;
@@ -179,15 +182,93 @@ class Passkeys {
                     showSupportInfo();
                 }
 
-                async function startLogin(username, context) {
+                const setPasskeyButtonVisible = (visible) => {
+                    if (!loginButton) {
+                        return;
+                    }
+                    loginButton.style.display = visible ? '' : 'none';
+                };
+
+                const shouldHidePasskeyForUser = (data) => {
+                    if (!data) {
+                        return false;
+                    }
+                    if (data.needs2FASetup) {
+                        return true;
+                    }
+                    if (data.requires2FA && !data.passkeyPasswordlessAllowed) {
+                        return true;
+                    }
+                    return false;
+                };
+
+                const checkUserPasskeyAvailability = async (username) => {
+                    if (!check2FAEndpoint || !username) {
+                        return;
+                    }
+
+                    const response = await fetch(check2FAEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ username }),
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    const data = await response.json();
+                    setPasskeyButtonVisible(!shouldHidePasskeyForUser(data));
+                };
+
+                let debounceId = null;
+                const debounceCheck = () => {
+                    if (!usernameInput) {
+                        return;
+                    }
+
+                    const username = usernameInput.value || '';
+                    if (!username) {
+                        setPasskeyButtonVisible(true);
+                        return;
+                    }
+
+                    if (debounceId) {
+                        clearTimeout(debounceId);
+                    }
+
+                    debounceId = setTimeout(() => {
+                        checkUserPasskeyAvailability(username).catch(() => {
+                            // Ignore fetch errors to avoid blocking UI.
+                        });
+                    }, 350);
+                };
+
+                if (usernameInput) {
+                    usernameInput.addEventListener('input', debounceCheck);
+                    usernameInput.addEventListener('blur', debounceCheck);
+                    if (usernameInput.value) {
+                        debounceCheck();
+                    }
+                }
+
+                async function startLogin(username, context, options = {}) {
                     if (!window.isSecureContext) {
                         showInsecureContext();
                         throw makeError('<?php echo esc_js(__('Insecure context.', 'acemedia-login-block')); ?>', 'insecure_context');
                     }
 
-                    if (!username) {
+                    const discoverable = !!options.discoverable;
+                    const mediation = options.mediation || undefined;
+                    const silent = !!options.silent;
+
+                    if (!username && !discoverable) {
                         const msg = '<?php echo esc_js(__('Please enter your username first.', 'acemedia-login-block')); ?>';
-                        showMessage(msg);
+                        if (!silent) {
+                            showMessage(msg);
+                        }
                         throw makeError(msg, 'missing_username');
                     }
 
@@ -196,18 +277,20 @@ class Passkeys {
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ username, context }),
+                        body: JSON.stringify({ username, context, discoverable }),
                     });
 
                     const optionsData = await optionsResponse.json();
                     if (!optionsResponse.ok || !optionsData.options) {
                         const msg = optionsData && optionsData.message ? optionsData.message : '<?php echo esc_js(__('Passkey login is not available for this account.', 'acemedia-login-block')); ?>';
-                        showMessage(msg);
+                        if (!silent) {
+                            showMessage(msg);
+                        }
                         throw makeError(msg, 'options_error');
                     }
 
                     const publicKey = normalizePublicKey(optionsData.options);
-                    const assertion = await navigator.credentials.get({ publicKey });
+                    const assertion = await navigator.credentials.get({ publicKey, mediation });
 
                     const payload = {
                         state: optionsData.state,
@@ -235,7 +318,9 @@ class Passkeys {
                     const verifyData = await verifyResponse.json();
                     if (!verifyResponse.ok || !verifyData.success) {
                         const msg = verifyData && verifyData.message ? verifyData.message : '<?php echo esc_js(__('Passkey verification failed.', 'acemedia-login-block')); ?>';
-                        showMessage(msg);
+                        if (!silent) {
+                            showMessage(msg);
+                        }
                         throw makeError(msg, 'verify_failed');
                     }
 
@@ -253,18 +338,41 @@ class Passkeys {
                 if (loginButton) {
                     loginButton.addEventListener('click', async function(event) {
                         event.preventDefault();
-                        const usernameInput = form ? form.querySelector('input[name="log"]') : null;
                         const username = usernameInput ? usernameInput.value : '';
                         showMessage('');
                         loginButton.disabled = true;
                         try {
-                            await startLogin(username, 'passwordless');
+                            if (!username) {
+                                await startLogin('', 'passwordless', { discoverable: true });
+                            } else {
+                                await startLogin(username, 'passwordless');
+                            }
                         } catch (e) {
                             // message handled above
                         } finally {
                             loginButton.disabled = false;
                         }
                     });
+                }
+
+                if (window.PublicKeyCredential.isConditionalMediationAvailable) {
+                    window.PublicKeyCredential.isConditionalMediationAvailable()
+                        .then((available) => {
+                            if (!available) {
+                                return;
+                            }
+
+                            startLogin('', 'passwordless', {
+                                discoverable: true,
+                                mediation: 'conditional',
+                                silent: true,
+                            }).catch(() => {
+                                // Silent for conditional UI.
+                            });
+                        })
+                        .catch(() => {
+                            // Ignore conditional capability failures.
+                        });
                 }
             })();
         </script>
@@ -597,45 +705,52 @@ class Passkeys {
 
         $username = sanitize_text_field($request->get_param('username'));
         $context = sanitize_text_field($request->get_param('context')) ?: 'passwordless';
+        $discoverable = (bool) $request->get_param('discoverable');
+
+        $user = null;
+        $allow_list = [];
 
         if (!$username) {
-            return new \WP_Error('missing_username', __('Username is required.', 'acemedia-login-block'), ['status' => 400]);
-        }
+            if (!$discoverable) {
+                return new \WP_Error('missing_username', __('Username is required.', 'acemedia-login-block'), ['status' => 400]);
+            }
+        } else {
+            $user = $this->get_user_from_login($username);
+            if (!$user) {
+                return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
+            }
 
-        $user = $this->get_user_from_login($username);
-        if (!$user) {
-            return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
-        }
+            if ($this->is_locked_out($user->ID)) {
+                return new \WP_Error('locked_out', __('Account is temporarily locked.', 'acemedia-login-block'), ['status' => 403]);
+            }
 
-        if ($this->is_locked_out($user->ID)) {
-            return new \WP_Error('locked_out', __('Account is temporarily locked.', 'acemedia-login-block'), ['status' => 403]);
-        }
+            $requires_2fa = $this->user_requires_2fa($user);
+            if ($context === 'passwordless' && $requires_2fa && !$this->user_allows_passwordless($user)) {
+                return new \WP_Error('passkey_requires_password', __('This account requires password login before passkey verification.', 'acemedia-login-block'), ['status' => 403]);
+            }
 
-        $requires_2fa = $this->user_requires_2fa($user);
-        if ($context === 'passwordless' && $requires_2fa && !$this->user_allows_passwordless($user)) {
-            return new \WP_Error('passkey_requires_password', __('This account requires password login before passkey verification.', 'acemedia-login-block'), ['status' => 403]);
-        }
+            $passkeys = $this->get_passkeys($user->ID);
+            if (empty($passkeys)) {
+                return new \WP_Error('no_passkeys', __('No passkeys registered for this account.', 'acemedia-login-block'), ['status' => 404]);
+            }
 
-        $passkeys = $this->get_passkeys($user->ID);
-        if (empty($passkeys)) {
-            return new \WP_Error('no_passkeys', __('No passkeys registered for this account.', 'acemedia-login-block'), ['status' => 404]);
-        }
-
-        $allow_list = [];
-        foreach ($passkeys as $passkey) {
-            if (!empty($passkey['id'])) {
-                $allow_list[] = ByteBuffer::fromBase64Url($passkey['id']);
+            foreach ($passkeys as $passkey) {
+                if (!empty($passkey['id'])) {
+                    $allow_list[] = ByteBuffer::fromBase64Url($passkey['id']);
+                }
             }
         }
 
         $webauthn = $this->get_webauthn();
-        $getArgs = $webauthn->getGetArgs($allow_list, 60, true, true, true, true, true, 'preferred');
+        $allow_credentials = empty($allow_list) ? null : $allow_list;
+        $getArgs = $webauthn->getGetArgs($allow_credentials, 60, true, true, true, true, true, 'preferred');
 
         $state = $this->generate_state();
         $this->store_state(self::TRANSIENT_LOGIN, $state, [
-            'user_id' => $user->ID,
+            'user_id' => $user ? $user->ID : 0,
             'challenge' => $this->buffer_to_base64url($webauthn->getChallenge()),
             'context' => $context,
+            'discoverable' => $discoverable,
         ], 10 * MINUTE_IN_SECONDS);
 
         return rest_ensure_response([
@@ -660,21 +775,33 @@ class Passkeys {
             return new \WP_Error('invalid_credential', __('Invalid credential payload.', 'acemedia-login-block'), ['status' => 400]);
         }
 
-        $user_id = (int) $state_data['user_id'];
-        $user = get_user_by('id', $user_id);
+        $user_id = (int) ($state_data['user_id'] ?? 0);
+        $user = $user_id ? get_user_by('id', $user_id) : null;
+
+        $credential_id = sanitize_text_field($credential['id'] ?? '');
+        if (!$credential_id) {
+            return new \WP_Error('invalid_credential', __('Invalid credential payload.', 'acemedia-login-block'), ['status' => 400]);
+        }
+
+        $passkey = null;
         if (!$user) {
-            return new \WP_Error('invalid_user', __('Invalid user.', 'acemedia-login-block'), ['status' => 404]);
+            $match = $this->find_user_by_credential_id($credential_id);
+            if ($match) {
+                $user = $match['user'];
+                $user_id = (int) $user->ID;
+                $passkey = $match['passkey'];
+            }
+        } else {
+            $passkey = $this->find_passkey($user_id, $credential_id);
+        }
+
+        if (!$user || !$passkey) {
+            do_action('wp_login_failed', $user ? $user->user_login : '');
+            return new \WP_Error('unknown_credential', __('Passkey not recognized.', 'acemedia-login-block'), ['status' => 403]);
         }
 
         if ($this->is_locked_out($user_id)) {
             return new \WP_Error('locked_out', __('Account is temporarily locked.', 'acemedia-login-block'), ['status' => 403]);
-        }
-
-        $credential_id = sanitize_text_field($credential['id'] ?? '');
-        $passkey = $this->find_passkey($user_id, $credential_id);
-        if (!$passkey) {
-            do_action('wp_login_failed', $user->user_login);
-            return new \WP_Error('unknown_credential', __('Passkey not recognized.', 'acemedia-login-block'), ['status' => 403]);
         }
 
         $clientDataJSON = $this->base64url_decode($credential['response']['clientDataJSON'] ?? '');
@@ -722,7 +849,7 @@ class Passkeys {
             ]);
         }
 
-        if ($this->user_requires_2fa($user)) {
+        if ($this->user_requires_2fa($user) && !$this->user_allows_passwordless($user)) {
             return new \WP_Error('passkey_requires_password', __('This account requires password login before passkey verification.', 'acemedia-login-block'), ['status' => 403]);
         }
 
@@ -867,6 +994,30 @@ class Passkeys {
                 return $passkey;
             }
         }
+        return null;
+    }
+
+    private function find_user_by_credential_id($credential_id) {
+        $users = get_users([
+            'meta_key' => self::META_KEY,
+            'fields' => ['ID'],
+        ]);
+
+        foreach ($users as $user_obj) {
+            $passkeys = $this->get_passkeys($user_obj->ID);
+            foreach ($passkeys as $passkey) {
+                if (!empty($passkey['id']) && hash_equals($passkey['id'], $credential_id)) {
+                    $user = get_user_by('id', $user_obj->ID);
+                    if ($user) {
+                        return [
+                            'user' => $user,
+                            'passkey' => $passkey,
+                        ];
+                    }
+                }
+            }
+        }
+
         return null;
     }
 

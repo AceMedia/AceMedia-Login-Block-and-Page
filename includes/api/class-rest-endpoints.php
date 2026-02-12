@@ -40,37 +40,22 @@ class Rest_Endpoints {
      * Verify 2FA code
      */
     public function verify_2fa($request) {
-        $username = sanitize_text_field($request->get_param('username'));
-        $code = sanitize_text_field($request->get_param('code'));
-
-        $user = get_user_by('login', $username);
-        if (!$user) {
-            return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
-        }
-
         $two_factor = new \AceLoginBlock\Auth\Two_Factor();
-        $result = $two_factor->verify_auth_app_code($user->ID, $code);
+        $result = $two_factor->verify_code($request);
 
-        if ($result['success']) {
-            return rest_ensure_response(['success' => true]);
-        } else {
-            return rest_ensure_response(['success' => false, 'message' => $result['message']]);
+        if (is_wp_error($result)) {
+            return $result;
         }
+
+        return rest_ensure_response($result);
     }
 
     /**
      * Check 2FA status
      */
     public function check_2fa($request) {
-        $username = sanitize_text_field($request->get_param('username'));
-
-        $user = get_user_by('login', $username);
-        if (!$user) {
-            return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
-        }
-
         $two_factor = new \AceLoginBlock\Auth\Two_Factor();
-        $status = $two_factor->check_2fa_status($user->ID);
+        $status = $two_factor->check_2fa_status($request);
 
         return rest_ensure_response($status);
     }

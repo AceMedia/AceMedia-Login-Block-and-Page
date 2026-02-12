@@ -59,12 +59,6 @@ class Authentication {
      * Handle the logout process
      */
     public function handle_logout() {
-        $custom_page_id = get_option('acemedia_login_block_custom_page', 0);
-        if (!$custom_page_id) {
-            // Custom login page not set, do nothing
-            return;
-        }
-
         if (isset($_GET['action']) && $_GET['action'] === 'logout') {
             // Verify the nonce
             if (isset($_GET['_wpnonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'log-out')) {

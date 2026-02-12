@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-WP-Nonce': aceLoginBlock.nonce,
                 },
                 body: JSON.stringify({ 
                     username,
@@ -174,7 +173,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-WP-Nonce': aceLoginBlock.nonce,
                     },
                     body: JSON.stringify({ code: twoFACode, username }),
                 })
