@@ -105,6 +105,22 @@ $front_end_pages = get_pages();
                 </td>
             </tr>
 
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Security Alert Emails', 'acemedia-login-block'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="acemedia_security_alerts_enabled" value="1" <?php checked(get_option('acemedia_security_alerts_enabled', false), true); ?> />
+                        <?php esc_html_e('Enable email alerts for security events', 'acemedia-login-block'); ?>
+                    </label>
+                    <p style="margin-top: 8px;">
+                        <label for="acemedia_security_alerts_email">
+                            <?php esc_html_e('Alert recipient (optional)', 'acemedia-login-block'); ?>
+                        </label>
+                        <input type="email" id="acemedia_security_alerts_email" name="acemedia_security_alerts_email" value="<?php echo esc_attr(get_option('acemedia_security_alerts_email', '')); ?>" placeholder="<?php echo esc_attr(get_option('admin_email')); ?>" />
+                    </p>
+                </td>
+            </tr>
+
             <?php
             $roles = wp_roles()->roles;
             foreach ($roles as $role => $details) :
@@ -230,4 +246,63 @@ $front_end_pages = get_pages();
             <input type="submit" name="clear_2fa_logs" class="button button-secondary" value="<?php esc_attr_e('Clear All 2FA Logs', 'acemedia-login-block'); ?>" onclick="return confirm('<?php esc_attr_e('Are you sure you want to clear all 2FA logs? This cannot be undone.', 'acemedia-login-block'); ?>');" />
         </form>
     </div>
+
+    <!-- Security Logs Section -->
+    <h2><?php esc_html_e('Security Event Logs', 'acemedia-login-block'); ?></h2>
+    <table class="wp-list-table widefat fixed striped">
+        <thead>
+            <tr>
+                <th><?php esc_html_e('Time', 'acemedia-login-block'); ?></th>
+                <th><?php esc_html_e('User', 'acemedia-login-block'); ?></th>
+                <th><?php esc_html_e('IP Address', 'acemedia-login-block'); ?></th>
+                <th><?php esc_html_e('Event', 'acemedia-login-block'); ?></th>
+                <th><?php esc_html_e('Status', 'acemedia-login-block'); ?></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php
+            $security_logs = [];
+            $users = get_users();
+
+            foreach ($users as $user) {
+                $user_logs = get_user_meta($user->ID, '_acemedia_security_logs', true) ?: [];
+                foreach ($user_logs as $log) {
+                    $log['username'] = $user->user_login;
+                    if (isset($log['time']) && strtotime($log['time']) > strtotime('-24 hours')) {
+                        $security_logs[] = $log;
+                    }
+                }
+            }
+
+            usort($security_logs, function($a, $b) {
+                return strtotime($b['time']) - strtotime($a['time']);
+            });
+
+            if (empty($security_logs)) : ?>
+                <tr>
+                    <td colspan="5"><?php esc_html_e('No security events in the last 24 hours.', 'acemedia-login-block'); ?></td>
+                </tr>
+            <?php else:
+                foreach ($security_logs as $log): ?>
+                <tr>
+                    <td><?php echo esc_html(get_date_from_gmt($log['time'])); ?></td>
+                    <td><?php echo esc_html($log['username']); ?></td>
+                    <td><?php echo esc_html($log['ip'] ?? ''); ?></td>
+                    <td><?php echo esc_html($log['event'] ?? ''); ?></td>
+                    <td>
+                        <?php if (isset($log['success']) && $log['success']): ?>
+                            <span class="dashicons dashicons-yes" style="color: #46b450;"></span>
+                            <?php esc_html_e('Success', 'acemedia-login-block'); ?>
+                        <?php elseif (isset($log['success'])): ?>
+                            <span class="dashicons dashicons-no" style="color: #dc3232;"></span>
+                            <?php esc_html_e('Failed', 'acemedia-login-block'); ?>
+                        <?php else: ?>
+                            <?php esc_html_e('Info', 'acemedia-login-block'); ?>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach;
+            endif; ?>
+        </tbody>
+    </table>
 </div>

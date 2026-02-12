@@ -54,8 +54,6 @@ require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/blocks/class-username-block.p
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/blocks/class-password-block.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/blocks/class-remember-me-block.php';
 
-// API includes
-require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/api/class-rest-endpoints.php';
 
 // Utility includes
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/utils/class-encryption.php';

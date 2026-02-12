@@ -8,6 +8,7 @@ use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\Color\Color;
 use Endroid\QrCode\RoundBlockSizeMode;
+use AceLoginBlock\Utils\Logging;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -887,21 +888,13 @@ public function acemedia_add_2fa_to_login_form() {
     private function verify_auth_app_code($user_id, $code) {
         $secret = get_user_meta($user_id, '_acemedia_2fa_secret', true);
         if ($secret && $this->verify_qr_code($secret, $code)) {
-
-            // Log failed attempt
-         //   $this->log_2fa_attempt($user_id, [
-         //       'action' => 'verify_2fa',
-          //      'success' => true
-          //  ]);
+            // Success: no log needed here.
             return ['success' => true];
         }
 
-
-        // Log failed attempt
-        $this->log_2fa_attempt($user_id, [
-            'action' => 'verify_2fa',
-            'success' => false
-        ]);
+        Logging::log_event($user_id, '2fa_failed', [
+            'method' => 'auth_app',
+        ], false);
 
         return ['success' => false, 'message' => __('Invalid 2FA code!', 'acemedia-login-block')];
     }
@@ -914,6 +907,9 @@ public function acemedia_add_2fa_to_login_form() {
         if ($code === $expected_code) {
             return ['success' => true];
         }
+        Logging::log_event($user_id, '2fa_failed', [
+            'method' => 'email',
+        ], false);
         return ['success' => false];
     }
 }

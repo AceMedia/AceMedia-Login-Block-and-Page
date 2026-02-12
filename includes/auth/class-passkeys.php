@@ -3,6 +3,7 @@ namespace AceLoginBlock\Auth;
 
 use lbuchs\WebAuthn\WebAuthn;
 use lbuchs\WebAuthn\Binary\ByteBuffer;
+use AceLoginBlock\Utils\Logging;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -693,6 +694,11 @@ class Passkeys {
             'transports' => is_array($transports) ? $transports : [],
         ]);
 
+        Logging::log_event($user->ID, 'passkey_registered', [
+            'name' => $name,
+            'transports' => is_array($transports) ? $transports : [],
+        ], true);
+
         $this->delete_state(self::TRANSIENT_REGISTER, $state);
 
         return rest_ensure_response(['success' => true]);
@@ -895,6 +901,9 @@ class Passkeys {
         }
 
         update_user_meta($user->ID, self::META_KEY, $updated);
+        Logging::log_event($user->ID, 'passkey_removed', [
+            'id' => $id,
+        ], true);
         return rest_ensure_response(['success' => true]);
     }
 

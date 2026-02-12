@@ -1,6 +1,8 @@
 <?php
 namespace AceLoginBlock\Auth;
 
+use AceLoginBlock\Utils\Logging;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -86,6 +88,11 @@ class Login_Lockout {
         if ((int) $attempts['count'] >= $this->get_max_attempts()) {
             $lock_seconds = $this->get_lock_minutes() * MINUTE_IN_SECONDS;
             update_user_meta($user_obj->ID, self::META_LOCKED_UNTIL, $now + $lock_seconds);
+            Logging::log_event($user_obj->ID, 'login_lockout', [
+                'attempts' => (int) $attempts['count'],
+                'window_minutes' => $this->get_window_minutes(),
+                'lock_minutes' => $this->get_lock_minutes(),
+            ], false);
         }
     }
 

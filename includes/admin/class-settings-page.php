@@ -87,6 +87,20 @@ class Settings_Page {
             'default' => 30,
         ]);
 
+        register_setting('acemedia_login_block_options_group', 'acemedia_security_alerts_enabled', [
+            'type' => 'boolean',
+            'description' => __('Enable security alert emails', 'acemedia-login-block'),
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => false,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_security_alerts_email', [
+            'type' => 'string',
+            'description' => __('Security alert email recipient', 'acemedia-login-block'),
+            'sanitize_callback' => 'sanitize_email',
+            'default' => '',
+        ]);
+
         // Add the settings page
         add_options_page(
             __('Ace Login Block Settings', 'acemedia-login-block'),
