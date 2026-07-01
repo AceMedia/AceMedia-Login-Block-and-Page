@@ -48,12 +48,17 @@ class Backup_Codes {
 
             wp_send_json_success(['codes' => $codes]);
         } else {
-            // Return placeholder codes for existing backup codes
-            $codes = array_map(function($code_data) {
-                return sprintf('BACKUP-%s', substr(md5($code_data['hash']), 0, 4));
-            }, $backup_codes);
+            // Codes are single-use and hashed — never expose them (or any hash-derived
+            // hint) again after generation. Report how many remain instead.
+            $remaining = count(array_filter($backup_codes, function($code_data) {
+                return empty($code_data['used']);
+            }));
 
-            wp_send_json_success(['codes' => $codes]);
+            wp_send_json_success([
+                'codes' => [],
+                'remaining' => $remaining,
+                'message' => __('Backup codes were already generated. Regenerate to get a new set.', 'acemedia-login-block'),
+            ]);
         }
     }
 

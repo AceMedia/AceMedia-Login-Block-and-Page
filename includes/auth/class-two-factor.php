@@ -125,7 +125,7 @@ class Two_Factor {
             return new \WP_Error('passkey_2fa_required', __('This account requires passkey verification for 2FA. Use the passkey option to continue.', 'acemedia-login-block'));
         }
 
-        $two_factor_code = isset($_POST['2fa_code']) ? $_POST['2fa_code'] : '';
+        $two_factor_code = isset($_POST['2fa_code']) ? sanitize_text_field(wp_unslash($_POST['2fa_code'])) : '';
         if (empty($two_factor_code)) {
             add_action('login_form', function() {
                 echo '<p><label for="2fa_code">' . 
@@ -155,7 +155,7 @@ class Two_Factor {
      * Verify 2FA code
      */
     public function verify_code($request) {
-        $code = $request->get_param('code');
+        $code = sanitize_text_field((string) $request->get_param('code'));
         $username = $request->get_param('username');
 
         if (!$username) {
@@ -164,7 +164,8 @@ class Two_Factor {
 
         $user = get_user_by('login', sanitize_text_field($username));
         if (!$user) {
-            return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'));
+            // Generic error — do not reveal whether the username exists.
+            return new \WP_Error('2fa_invalid', __('Invalid verification code.', 'acemedia-login-block'), ['status' => 400]);
         }
 
         // Rate limiting
@@ -277,7 +278,17 @@ class Two_Factor {
         $user = get_user_by('login', sanitize_text_field($username));
 
         if (!$user) {
-            return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
+            // Do not reveal whether the username exists (prevents user enumeration).
+            return [
+                'is2FAEnabled' => false,
+                'requires2FA' => false,
+                'requiresPasskey2FA' => false,
+                'hasRegisteredPasskey' => false,
+                'passkeyPasswordlessAllowed' => false,
+                'method' => 'email',
+                'needs2FASetup' => false,
+                'trustedDevice' => false,
+            ];
         }
 
         $needs_2fa = $this->user_requires_2fa($user);
@@ -375,7 +386,8 @@ class Two_Factor {
 
         try {
             $totp = \OTPHP\TOTP::create($secret);
-            return $totp->verify($code);
+            // Accept the current code plus one window either side (±30s clock skew).
+            return $totp->verify($code, null, 1);
         } catch (Exception $e) {
             error_log('TOTP verification error: ' . $e->getMessage());
             return false;
@@ -421,7 +433,7 @@ class Two_Factor {
      */
     public static function generate_qr_code($user_id) {
 
-        $secret = get_user_meta($user_id, '_acemedia_2fa_secret', true);
+        $secret = \acemedia_login_block_decrypt(get_user_meta($user_id, '_acemedia_2fa_secret', true));
         if (!$secret) {
             $base32_alphabet = str_split('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567');
             $secret = '';
@@ -430,7 +442,7 @@ class Two_Factor {
                 $secret .= $base32_alphabet[array_rand($base32_alphabet)];
             }
 
-            update_user_meta($user_id, '_acemedia_2fa_secret', $secret);
+            update_user_meta($user_id, '_acemedia_2fa_secret', \acemedia_login_block_encrypt($secret));
         }
 
         $site_name = html_entity_decode(get_bloginfo('name'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -1023,11 +1035,12 @@ public function acemedia_add_2fa_to_login_form() {
      * Check rate limit for 2FA attempts
      */
     private function check_rate_limit($user_id) {
+        $max = (int) apply_filters('acemedia_2fa_max_attempts_per_hour', 5);
         $attempts = get_transient('2fa_attempts_' . $user_id);
         if ($attempts === false) {
             set_transient('2fa_attempts_' . $user_id, 1, HOUR_IN_SECONDS);
             return true;
-        } else if ($attempts >= 1000) {
+        } else if ($attempts >= $max) {
             return false;
         } else {
             set_transient('2fa_attempts_' . $user_id, $attempts + 1, HOUR_IN_SECONDS);
@@ -1056,7 +1069,7 @@ public function acemedia_add_2fa_to_login_form() {
      * Verify authentication app code
      */
     private function verify_auth_app_code($user_id, $code) {
-        $secret = get_user_meta($user_id, '_acemedia_2fa_secret', true);
+        $secret = \acemedia_login_block_decrypt(get_user_meta($user_id, '_acemedia_2fa_secret', true));
         if ($secret && $this->verify_qr_code($secret, $code)) {
             // Success: no log needed here.
             return ['success' => true];
@@ -1074,7 +1087,14 @@ public function acemedia_add_2fa_to_login_form() {
      */
     private function verify_email_code($user_id, $code) {
         $expected_code = get_user_meta($user_id, '_acemedia_2fa_code', true);
-        if ($code === $expected_code) {
+        $code_time     = (int) get_user_meta($user_id, '_acemedia_2fa_code_time', true);
+        $ttl           = (int) apply_filters('acemedia_2fa_email_code_ttl', 5 * MINUTE_IN_SECONDS);
+
+        if ($expected_code && $code_time && (time() - $code_time) <= $ttl
+            && hash_equals((string) $expected_code, (string) $code)) {
+            // Single-use: invalidate the code once accepted.
+            delete_user_meta($user_id, '_acemedia_2fa_code');
+            delete_user_meta($user_id, '_acemedia_2fa_code_time');
             return ['success' => true];
         }
         Logging::log_event($user_id, '2fa_failed', [

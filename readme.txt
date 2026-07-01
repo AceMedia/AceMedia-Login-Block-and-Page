@@ -2,9 +2,9 @@
 Contributors: shanerounce  
 Tags: login, block, custom login, WordPress, Gutenberg  
 Requires at least: 6.6 
-Tested up to: 6.7
+Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 0.427.0  
+Stable tag: 0.428.0  
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -65,6 +65,18 @@ No. Remembered devices only skip the 2FA step. Password entry is still required.
 Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 
 == Changelog ==
+
+= 0.428.0 =
+Release Date: 2026-07-01
+Security release — hardening of the two-factor and REST layer:
+* Email 2FA codes now expire after 5 minutes and are single-use (previously never expired).
+* Two-factor code verification now uses constant-time comparison (hash_equals).
+* Reduced the 2FA attempt rate limit from 1000 to 5 per hour (filterable) to prevent brute-forcing.
+* TOTP secrets are now encrypted at rest with libsodium (legacy plaintext secrets remain readable and are upgraded on next save).
+* REST 2FA endpoints no longer disclose whether a username exists (prevents user enumeration).
+* Sanitised all 2FA code inputs; set an explicit TOTP verification window (±30s).
+* Backup-code endpoint no longer returns hash-derived placeholders after generation.
+* Renamed internal encryption helpers off the reserved wp_ prefix for WordPress.org compliance.
 
 = 0.427.0 =
 Release Date: 2026-02-24

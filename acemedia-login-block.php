@@ -3,9 +3,9 @@
  * Plugin Name:       Ace Login Block
  * Description:       A block to replace the WordPress login page using a custom page and its template from the site editor.
  * Requires at least: 6.6
- * Tested up to:      6.7
+ * Tested up to:      7.0
  * Requires PHP:      8.0
- * Version:           0.427.0
+ * Version:           0.428.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -341,22 +341,43 @@ add_action('admin_init', 'acemedia_register_2fa_method_setting');
 
 
 
-function wp_encrypt($data) {
-    $key = wp_salt('auth');
-    return sodium_crypto_secretbox(
-        json_encode($data),
-        random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
-        sodium_crypto_generichash($key, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES)
-    );
+/**
+ * Encrypt a scalar value at rest (e.g. a TOTP secret) with libsodium.
+ * Returns an "aceenc:" prefixed base64 of nonce+ciphertext so decryption can
+ * distinguish encrypted values from legacy plaintext. Renamed off the reserved
+ * wp_ prefix for WordPress.org compliance.
+ */
+function acemedia_login_block_encrypt($data) {
+    if (!function_exists('sodium_crypto_secretbox')) {
+        return $data;
+    }
+    $key    = sodium_crypto_generichash(wp_salt('auth'), '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+    $nonce  = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+    $cipher = sodium_crypto_secretbox((string) $data, $nonce, $key);
+    return 'aceenc:' . base64_encode($nonce . $cipher);
 }
 
-function wp_decrypt($encrypted) {
-    $key = wp_salt('auth');
-    return json_decode(sodium_crypto_secretbox_open(
-        $encrypted,
-        random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
-        sodium_crypto_generichash($key, '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES)
-    ), true);
+/**
+ * Decrypt a value produced by acemedia_login_block_encrypt(). Legacy plaintext
+ * (no "aceenc:" prefix) is returned unchanged so existing secrets keep working;
+ * an undecryptable value returns false.
+ */
+function acemedia_login_block_decrypt($encrypted) {
+    if (!is_string($encrypted) || strpos($encrypted, 'aceenc:') !== 0) {
+        return $encrypted;
+    }
+    if (!function_exists('sodium_crypto_secretbox_open')) {
+        return false;
+    }
+    $raw = base64_decode(substr($encrypted, 7), true);
+    if ($raw === false || strlen($raw) <= SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
+        return false;
+    }
+    $key    = sodium_crypto_generichash(wp_salt('auth'), '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+    $nonce  = substr($raw, 0, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+    $cipher = substr($raw, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+    $plain  = sodium_crypto_secretbox_open($cipher, $nonce, $key);
+    return $plain === false ? false : $plain;
 }
 
 
