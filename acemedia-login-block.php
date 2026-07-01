@@ -5,7 +5,7 @@
  * Requires at least: 6.6
  * Tested up to:      6.7
  * Requires PHP:      8.0
- * Version:           0.426.0
+ * Version:           0.427.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -28,7 +28,7 @@ require 'vendor/autoload.php';
 
 
 // Define plugin constants
-define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.426.0');
+define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.427.0');
 define('ACEMEDIA_LOGIN_BLOCK_PATH', plugin_dir_path(__FILE__));
 define('ACEMEDIA_LOGIN_BLOCK_URL', plugin_dir_url(__FILE__));
 
@@ -397,6 +397,7 @@ function acemedia_enqueue_admin_login_script() {
             'passkeyPasswordLabel' => __('Use Passkey for Password', 'acemedia-login-block'),
             'passkeyTwoFALabel' => __('Use Passkey for 2FA', 'acemedia-login-block'),
             'rememberDeviceLabel' => __('Remember this device for 2FA for 30 days', 'acemedia-login-block'),
+            'csrfToken' => wp_create_nonce('wp_rest'),
             'nonce' => wp_create_nonce('wp_rest'),
         ]);
     }

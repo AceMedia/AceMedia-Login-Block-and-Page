@@ -14,12 +14,14 @@ class Passkeys {
     private const TRANSIENT_REGISTER = 'acemedia_passkey_register_';
     private const TRANSIENT_LOGIN = 'acemedia_passkey_login_';
     private const TRANSIENT_2FA = 'acemedia_passkey_2fa_';
+    private const TRANSIENT_PASSWORD_FACTOR = 'acemedia_passkey_pwd_';
 
     public function __construct() {
         add_action('rest_api_init', [$this, 'register_routes']);
         add_action('login_form', [$this, 'render_login_ui'], 20);
         add_action('show_user_profile', [$this, 'render_profile_ui'], 20);
         add_action('edit_user_profile', [$this, 'render_profile_ui'], 20);
+        add_filter('authenticate', [$this, 'authenticate_with_passkey_token'], 15, 3);
     }
 
     public function register_routes() {
@@ -291,7 +293,40 @@ class Passkeys {
                     }
 
                     const publicKey = normalizePublicKey(optionsData.options);
-                    const assertion = await navigator.credentials.get({ publicKey, mediation });
+                    let assertion = null;
+                    try {
+                        assertion = await navigator.credentials.get({ publicKey, mediation });
+                    } catch (error) {
+                        if (error && error.name === 'NotAllowedError') {
+                            const msg = '<?php echo esc_js(__('Passkey verification was cancelled or timed out. Please try again and complete the device prompt.', 'acemedia-login-block')); ?>';
+                            if (!silent) {
+                                showMessage(msg);
+                            }
+                            throw makeError(msg, 'not_allowed');
+                        }
+
+                        if (error && error.name === 'AbortError') {
+                            const msg = '<?php echo esc_js(__('Passkey verification was interrupted. Please try again.', 'acemedia-login-block')); ?>';
+                            if (!silent) {
+                                showMessage(msg);
+                            }
+                            throw makeError(msg, 'aborted');
+                        }
+
+                        if (error && error.name === 'SecurityError') {
+                            const msg = '<?php echo esc_js(__('Passkey verification failed security checks. Confirm HTTPS and that your device/browser support WebAuthn.', 'acemedia-login-block')); ?>';
+                            if (!silent) {
+                                showMessage(msg);
+                            }
+                            throw makeError(msg, 'security_error');
+                        }
+
+                        const msg = '<?php echo esc_js(__('Passkey verification failed due to a temporary browser/device issue. Please retry once.', 'acemedia-login-block')); ?>';
+                        if (!silent) {
+                            showMessage(msg);
+                        }
+                        throw makeError(msg, 'transient_error');
+                    }
 
                     const payload = {
                         state: optionsData.state,
@@ -329,6 +364,10 @@ class Passkeys {
                         return verifyData.token;
                     }
 
+                    if (context === 'password_factor') {
+                        return verifyData;
+                    }
+
                     if (verifyData.redirect) {
                         window.location.href = verifyData.redirect;
                     }
@@ -339,14 +378,101 @@ class Passkeys {
                 if (loginButton) {
                     loginButton.addEventListener('click', async function(event) {
                         event.preventDefault();
+                        if (!form) {
+                            showMessage('<?php echo esc_js(__('Login form not available. Please refresh and try again.', 'acemedia-login-block')); ?>');
+                            return;
+                        }
+
                         const username = usernameInput ? usernameInput.value : '';
                         showMessage('');
                         loginButton.disabled = true;
                         try {
                             if (!username) {
-                                await startLogin('', 'passwordless', { discoverable: true });
-                            } else {
-                                await startLogin(username, 'passwordless');
+                                try {
+                                    const discoverableResult = await startLogin('', 'password_factor', { discoverable: true });
+                                    if (discoverableResult && discoverableResult.login && usernameInput && !usernameInput.value) {
+                                        usernameInput.value = discoverableResult.login;
+                                    }
+
+                                    const tokenInput = form.querySelector('input[name="acemedia_passkey_password_token"]') || document.createElement('input');
+                                    tokenInput.type = 'hidden';
+                                    tokenInput.name = 'acemedia_passkey_password_token';
+                                    tokenInput.value = discoverableResult && discoverableResult.token ? discoverableResult.token : '';
+                                    if (!tokenInput.parentNode) {
+                                        form.appendChild(tokenInput);
+                                    }
+
+                                    const submitButton = form.querySelector('#wp-submit');
+                                    if (submitButton) {
+                                        submitButton.click();
+                                    } else if (form.requestSubmit) {
+                                        form.requestSubmit();
+                                    } else {
+                                        form.submit();
+                                    }
+                                    return;
+                                } catch (discoverableError) {
+                                    const discoverableCode = discoverableError && discoverableError.message ? discoverableError.message : '';
+                                    const discoverableLimitedCodes = ['options_error', 'not_allowed', 'verify_failed', 'transient_error'];
+                                    if (discoverableLimitedCodes.includes(discoverableCode)) {
+                                        showMessage('<?php echo esc_js(__('This security key cannot provide account autofill on this browser/device. Enter your username, then click “Use Passkey for Password” again.', 'acemedia-login-block')); ?>', true);
+                                        return;
+                                    }
+
+                                    throw discoverableError;
+                                }
+                            }
+
+                            try {
+                                const usernameResult = await startLogin(username, 'password_factor');
+
+                                const tokenInput = form.querySelector('input[name="acemedia_passkey_password_token"]') || document.createElement('input');
+                                tokenInput.type = 'hidden';
+                                tokenInput.name = 'acemedia_passkey_password_token';
+                                tokenInput.value = usernameResult && usernameResult.token ? usernameResult.token : '';
+                                if (!tokenInput.parentNode) {
+                                    form.appendChild(tokenInput);
+                                }
+
+                                const submitButton = form.querySelector('#wp-submit');
+                                if (submitButton) {
+                                    submitButton.click();
+                                } else if (form.requestSubmit) {
+                                    form.requestSubmit();
+                                } else {
+                                    form.submit();
+                                }
+                                return;
+                            } catch (usernameError) {
+                                const usernameCode = usernameError && usernameError.message ? usernameError.message : '';
+                                const discoverableFallbackCodes = ['options_error', 'not_allowed', 'transient_error', 'verify_failed'];
+
+                                if (!discoverableFallbackCodes.includes(usernameCode)) {
+                                    throw usernameError;
+                                }
+
+                                showMessage('<?php echo esc_js(__('Trying account discovery with your passkey…', 'acemedia-login-block')); ?>', false);
+                                const discoverableFallbackResult = await startLogin('', 'password_factor', { discoverable: true });
+                                if (discoverableFallbackResult && discoverableFallbackResult.login && usernameInput && !usernameInput.value) {
+                                    usernameInput.value = discoverableFallbackResult.login;
+                                }
+
+                                const tokenInput = form.querySelector('input[name="acemedia_passkey_password_token"]') || document.createElement('input');
+                                tokenInput.type = 'hidden';
+                                tokenInput.name = 'acemedia_passkey_password_token';
+                                tokenInput.value = discoverableFallbackResult && discoverableFallbackResult.token ? discoverableFallbackResult.token : '';
+                                if (!tokenInput.parentNode) {
+                                    form.appendChild(tokenInput);
+                                }
+
+                                const submitButton = form.querySelector('#wp-submit');
+                                if (submitButton) {
+                                    submitButton.click();
+                                } else if (form.requestSubmit) {
+                                    form.requestSubmit();
+                                } else {
+                                    form.submit();
+                                }
                             }
                         } catch (e) {
                             // message handled above
@@ -388,6 +514,14 @@ class Passkeys {
         $passkeys = $this->get_passkeys($user->ID);
         ?>
         <h3><?php esc_html_e('Passkeys / Security Keys', 'acemedia-login-block'); ?></h3>
+        <p class="description"><?php esc_html_e('Use passkeys to sign in with built-in authenticators (Touch ID/Windows Hello) or hardware keys (for example, YubiKey or Flipper Zero with FIDO2 enabled).', 'acemedia-login-block'); ?></p>
+        <p class="description"><?php esc_html_e('For username autofill/account discovery login, the key must store a discoverable credential. If your key was registered before recent updates, remove and re-register it to enable this flow.', 'acemedia-login-block'); ?></p>
+        <p class="description"><?php esc_html_e('Compatibility: latest Chrome, Edge, Safari, and Firefox on HTTPS (or localhost). If setup fails, confirm your browser and hardware key both support WebAuthn/FIDO2.', 'acemedia-login-block'); ?></p>
+        <ol class="description" style="margin: 8px 0 14px 18px;">
+            <li><?php esc_html_e('Give the key a name (optional) and click “Register Passkey”.', 'acemedia-login-block'); ?></li>
+            <li><?php esc_html_e('When prompted, choose your security key and complete touch/PIN verification on the device.', 'acemedia-login-block'); ?></li>
+            <li><?php esc_html_e('After success, the page reloads and your key appears in the registered list.', 'acemedia-login-block'); ?></li>
+        </ol>
         <table class="form-table">
             <tr>
                 <th><?php esc_html_e('Registered Passkeys', 'acemedia-login-block'); ?></th>
@@ -433,20 +567,45 @@ class Passkeys {
         </table>
         <script type="text/javascript">
             (function() {
-                if (!window.PublicKeyCredential) {
-                    return;
-                }
-
                 const registerButton = document.getElementById('acemedia-passkey-register');
                 const nameInput = document.getElementById('acemedia-passkey-name');
                 const statusEl = document.getElementById('acemedia-passkey-status');
                 const removeButtons = document.querySelectorAll('.acemedia-passkey-remove');
+                const supportDocUrl = 'https://developer.mozilla.org/docs/Web/API/Web_Authentication_API';
 
                 const showStatus = (message, isError = false) => {
                     if (!statusEl) return;
                     statusEl.textContent = message;
                     statusEl.style.color = isError ? '#b32d2e' : '#1d2327';
                 };
+
+                if (!window.PublicKeyCredential) {
+                    showStatus('<?php echo esc_js(__('This browser does not support passkeys. Try a recent Chrome, Edge, Safari, or Firefox release, or use another browser.', 'acemedia-login-block')); ?>' + ' ' + supportDocUrl, true);
+                    if (registerButton) {
+                        registerButton.disabled = true;
+                    }
+                    return;
+                }
+
+                if (!window.isSecureContext) {
+                    showStatus('<?php echo esc_js(__('Passkeys require a secure context (HTTPS or localhost).', 'acemedia-login-block')); ?>' + ' ' + supportDocUrl, true);
+                    if (registerButton) {
+                        registerButton.disabled = true;
+                    }
+                    return;
+                }
+
+                if (window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+                    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+                        .then((available) => {
+                            if (!available) {
+                                showStatus('<?php echo esc_js(__('No built-in authenticator detected on this device. You can still register a hardware security key (including Flipper Zero with FIDO2).', 'acemedia-login-block')); ?>', false);
+                            }
+                        })
+                        .catch(() => {
+                            showStatus('<?php echo esc_js(__('Built-in authenticator detection is unavailable in this browser. Hardware security keys are still supported.', 'acemedia-login-block')); ?>', false);
+                        });
+                }
 
                 const bufferToBase64Url = (buffer) => {
                     const bytes = new Uint8Array(buffer);
@@ -490,6 +649,7 @@ class Passkeys {
                             'Content-Type': 'application/json',
                             'X-WP-Nonce': '<?php echo esc_js(wp_create_nonce('wp_rest')); ?>',
                         },
+                        credentials: 'same-origin',
                         body: JSON.stringify({ name: nameInput ? nameInput.value : '' }),
                     });
 
@@ -509,7 +669,23 @@ class Passkeys {
                             showStatus('<?php echo esc_js(__('A passkey already exists for this device. Try removing it or use a different authenticator.', 'acemedia-login-block')); ?>', true);
                             return;
                         }
-                        showStatus('<?php echo esc_js(__('Passkey registration failed.', 'acemedia-login-block')); ?>', true);
+
+                        if (error && error.name === 'NotAllowedError') {
+                            showStatus('<?php echo esc_js(__('Passkey registration was cancelled or timed out. Please try again and complete the device prompt.', 'acemedia-login-block')); ?>', true);
+                            return;
+                        }
+
+                        if (error && error.name === 'SecurityError') {
+                            showStatus('<?php echo esc_js(__('Passkey registration was blocked by browser security checks. Confirm you are on HTTPS and using the correct domain (RP ID).', 'acemedia-login-block')); ?>', true);
+                            return;
+                        }
+
+                        if (error && error.name === 'NotSupportedError') {
+                            showStatus('<?php echo esc_js(__('This authenticator or browser does not support the requested passkey settings. Try a different key or browser.', 'acemedia-login-block')); ?>', true);
+                            return;
+                        }
+
+                        showStatus('<?php echo esc_js(__('Passkey registration failed.', 'acemedia-login-block')); ?>' + (error && error.message ? ' ' + error.message : ''), true);
                         return;
                     }
 
@@ -534,6 +710,7 @@ class Passkeys {
                             'Content-Type': 'application/json',
                             'X-WP-Nonce': '<?php echo esc_js(wp_create_nonce('wp_rest')); ?>',
                         },
+                        credentials: 'same-origin',
                         body: JSON.stringify(payload),
                     });
 
@@ -577,6 +754,7 @@ class Passkeys {
                                     'Content-Type': 'application/json',
                                     'X-WP-Nonce': '<?php echo esc_js(wp_create_nonce('wp_rest')); ?>',
                                 },
+                                credentials: 'same-origin',
                                 body: JSON.stringify({ id }),
                             });
                             const data = await response.json();
@@ -613,13 +791,12 @@ class Passkeys {
         }
 
         $webauthn = $this->get_webauthn();
-        $attestation = $this->get_attestation_preference();
         $createArgs = $webauthn->getCreateArgs(
             (string) $user->ID,
             $user->user_login,
             $user->display_name ?: $user->user_login,
             60,
-            $attestation,
+            'required',
             'preferred',
             null,
             $exclude
@@ -855,6 +1032,19 @@ class Passkeys {
             ]);
         }
 
+        if (($state_data['context'] ?? '') === 'password_factor') {
+            $token = $this->generate_state(24);
+            $this->store_state(self::TRANSIENT_PASSWORD_FACTOR, $token, [
+                'user_id' => $user_id,
+            ], 5 * MINUTE_IN_SECONDS);
+
+            return rest_ensure_response([
+                'success' => true,
+                'token' => $token,
+                'login' => $user->user_login,
+            ]);
+        }
+
         if ($this->user_requires_2fa($user) && !$this->user_allows_passwordless($user)) {
             return new \WP_Error('passkey_requires_password', __('This account requires password login before passkey verification.', 'acemedia-login-block'), ['status' => 403]);
         }
@@ -920,6 +1110,39 @@ class Passkeys {
 
         delete_transient(self::TRANSIENT_2FA . $token);
         return true;
+    }
+
+    public function authenticate_with_passkey_token($user, $username, $password) {
+        $token = isset($_POST['acemedia_passkey_password_token'])
+            ? sanitize_text_field(wp_unslash($_POST['acemedia_passkey_password_token']))
+            : '';
+
+        if (!$token) {
+            return $user;
+        }
+
+        $token_data = get_transient(self::TRANSIENT_PASSWORD_FACTOR . $token);
+        if (!$token_data || empty($token_data['user_id'])) {
+            return new \WP_Error('passkey_password_token_invalid', __('Passkey login session expired. Please try again.', 'acemedia-login-block'));
+        }
+
+        $target_user = get_user_by('id', (int) $token_data['user_id']);
+        if (!$target_user) {
+            return new \WP_Error('passkey_password_user_missing', __('Passkey login failed for this account. Please try again.', 'acemedia-login-block'));
+        }
+
+        if (!empty($username)) {
+            $normalized_username = sanitize_text_field($username);
+            $matches_login = hash_equals((string) $target_user->user_login, (string) $normalized_username);
+            $matches_email = is_email($normalized_username) && hash_equals((string) $target_user->user_email, (string) $normalized_username);
+
+            if (!$matches_login && !$matches_email) {
+                return new \WP_Error('passkey_password_username_mismatch', __('Passkey matched a different account than the provided username.', 'acemedia-login-block'));
+            }
+        }
+
+        delete_transient(self::TRANSIENT_PASSWORD_FACTOR . $token);
+        return $target_user;
     }
 
     private function is_enabled() {
@@ -1032,7 +1255,10 @@ class Passkeys {
 
     private function user_requires_2fa($user) {
         foreach ($user->roles as $role) {
-            if (get_option("acemedia_2fa_enabled_{$role}", false)) {
+            if (
+                get_option("acemedia_2fa_enabled_{$role}", false)
+                || get_option("acemedia_passkey_2fa_required_{$role}", false)
+            ) {
                 return true;
             }
         }
@@ -1041,7 +1267,10 @@ class Passkeys {
 
     private function user_allows_passwordless($user) {
         foreach ($user->roles as $role) {
-            if (get_option("acemedia_passkey_passwordless_{$role}", false)) {
+            if (
+                get_option("acemedia_passkey_passwordless_{$role}", false)
+                || get_option("acemedia_passkey_2fa_required_{$role}", false)
+            ) {
                 return true;
             }
         }

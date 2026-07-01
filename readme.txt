@@ -1,10 +1,10 @@
 === Ace Login Block ===
 Contributors: shanerounce  
 Tags: login, block, custom login, WordPress, Gutenberg  
-Requires at least: 6.3 
+Requires at least: 6.6 
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.426.0  
+Stable tag: 0.427.0  
 License: GPLv2 or later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -65,6 +65,14 @@ No. Remembered devices only skip the 2FA step. Password entry is still required.
 Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 
 == Changelog ==
+
+= 0.427.0 =
+Release Date: 2026-02-24
+* Fixed inconsistent 2FA form state handling that could show false authentication popups during successful login.
+* Replaced disruptive login alerts with inline status messages across custom login and wp-login flows.
+* Improved browser compatibility and secure-context messaging for passkeys.
+* Added admin guidance for security key setup, including Flipper Zero/FIDO2 usage notes.
+* Improved passkey registration feedback and request handling reliability in user profile screens.
 
 = 0.426.0 =
 Release Date: 2024-12-05

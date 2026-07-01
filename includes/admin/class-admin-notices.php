@@ -7,6 +7,8 @@
 
 namespace AceLoginBlock\Admin;
 
+use AceLoginBlock\Auth\Two_Factor;
+
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -39,24 +41,7 @@ class Admin_Notices {
      * Check if user needs 2FA setup
      */
     private function user_needs_2fa_setup($user_id) {
-        $user = get_userdata($user_id);
-        if (!$user) {
-            return false;
-        }
-
-        foreach ($user->roles as $role) {
-            $role_2fa_required = (bool) get_option("acemedia_2fa_enabled_{$role}", false);
-            if ($role_2fa_required) {
-                $user_2fa_enabled = (bool) get_user_meta($user_id, '_acemedia_2fa_enabled', true);
-                $user_2fa_setup_complete = (bool) get_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
-
-                if (!$user_2fa_setup_complete || !$user_2fa_enabled) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return Two_Factor::user_needs_setup($user_id);
     }
 
 

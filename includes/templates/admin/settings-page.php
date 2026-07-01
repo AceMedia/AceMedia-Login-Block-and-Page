@@ -40,6 +40,17 @@ $front_end_pages = get_pages();
                         <input type="checkbox" name="acemedia_passkeys_enabled" value="1" <?php checked(get_option('acemedia_passkeys_enabled', true), true); ?> />
                         <?php esc_html_e('Enable passkeys on wp-login.php', 'acemedia-login-block'); ?>
                     </label>
+                    <p class="description" style="margin-top: 8px;">
+                        <?php esc_html_e('Browser compatibility: latest Chrome, Edge, Safari, and Firefox on HTTPS (or localhost).', 'acemedia-login-block'); ?>
+                    </p>
+                    <p class="description" style="margin-top: 4px;">
+                        <?php esc_html_e('Hardware keys supported: standard FIDO2/WebAuthn devices, including Flipper Zero (when FIDO2 app/mode is enabled).', 'acemedia-login-block'); ?>
+                    </p>
+                    <ol class="description" style="margin: 8px 0 0 18px;">
+                        <li><?php esc_html_e('Enable passkeys here and save settings.', 'acemedia-login-block'); ?></li>
+                        <li><?php esc_html_e('Open your user Profile and register a passkey/security key.', 'acemedia-login-block'); ?></li>
+                        <li><?php esc_html_e('For Flipper Zero: open the FIDO2 app, connect over USB/NFC/BLE, then confirm when prompted.', 'acemedia-login-block'); ?></li>
+                    </ol>
                     <p style="margin-top: 8px;">
                         <label for="acemedia_passkeys_rp_id">
                             <?php esc_html_e('RP ID override (optional)', 'acemedia-login-block'); ?>
@@ -127,6 +138,7 @@ $front_end_pages = get_pages();
                 $redirect_url = get_option("acemedia_login_block_redirect_{$role}", '');
                 $is_2fa_enabled = get_option("acemedia_2fa_enabled_{$role}", false);
                 $allow_passkey_passwordless = get_option("acemedia_passkey_passwordless_{$role}", false);
+                $require_passkey_2fa = get_option("acemedia_passkey_2fa_required_{$role}", false);
             ?>
                 <tr valign="top">
                     <th scope="row"><?php echo esc_html(ucfirst($role)); ?></th>
@@ -165,6 +177,13 @@ $front_end_pages = get_pages();
                             <input type="checkbox" name="<?php echo esc_attr("acemedia_passkey_passwordless_{$role}"); ?>" value="1" <?php checked($allow_passkey_passwordless, true); ?>>
                             <?php esc_html_e('Allow passkey passwordless', 'acemedia-login-block'); ?>
                         </label>
+                        <label style="margin-left: 8px;">
+                            <input type="checkbox" name="<?php echo esc_attr("acemedia_passkey_2fa_required_{$role}"); ?>" value="1" <?php checked($require_passkey_2fa, true); ?>>
+                            <?php esc_html_e('Require passkey for 2FA', 'acemedia-login-block'); ?>
+                        </label>
+                        <p class="description" style="margin: 6px 0 0 0;">
+                            <?php esc_html_e('When enabled, users in this role must complete the second factor with a registered passkey. Code-based 2FA methods are blocked for login.', 'acemedia-login-block'); ?>
+                        </p>
                     </td>
                 </tr>
             <?php endforeach; ?>

@@ -67,12 +67,18 @@ class Two_Factor {
         }
 
         foreach ($user->roles as $role) {
-            $role_2fa_required = (bool) get_option("acemedia_2fa_enabled_{$role}", false);
+            $role_2fa_required = (bool) get_option("acemedia_2fa_enabled_{$role}", false)
+                || (bool) get_option("acemedia_passkey_2fa_required_{$role}", false);
             if ($role_2fa_required) {
                 $user_2fa_enabled = (bool) get_user_meta($user_id, '_acemedia_2fa_enabled', true);
                 $user_2fa_setup_complete = (bool) get_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
+                $role_requires_passkey_2fa = (bool) get_option("acemedia_passkey_2fa_required_{$role}", false);
 
                 if (!$user_2fa_setup_complete || !$user_2fa_enabled) {
+                    return true;
+                }
+
+                if ($role_requires_passkey_2fa && !self::user_has_registered_passkey_static($user_id)) {
                     return true;
                 }
             }
@@ -89,27 +95,34 @@ class Two_Factor {
             return $user;
         }
 
-        // Check if role requires 2FA
-        $needs_2fa = false;
-        foreach ($user->roles as $role) {
-            if (get_option("acemedia_2fa_enabled_{$role}", false)) {
-                $needs_2fa = true;
-                break;
-            }
-        }
+        $needs_2fa = $this->user_requires_2fa($user);
+        $requires_passkey_2fa = $this->user_requires_passkey_2fa($user);
 
         if (!$needs_2fa) {
             return $user;
         }
 
-        if ($this->is_trusted_device($user->ID)) {
+        if ($requires_passkey_2fa && !$this->user_has_registered_passkey($user->ID)) {
+            return new \WP_Error(
+                'passkey_required_not_configured',
+                __('Your account requires passkey 2FA, but no passkey is registered yet. Please register a passkey in your profile.', 'acemedia-login-block')
+            );
+        }
+
+        if (!$requires_passkey_2fa && $this->is_trusted_device($user->ID)) {
             return $user;
         }
 
         $passkey_token = isset($_POST['acemedia_passkey_token']) ? sanitize_text_field(wp_unslash($_POST['acemedia_passkey_token'])) : '';
         if ($passkey_token && Passkeys::verify_2fa_token($user->ID, $passkey_token)) {
-            $this->maybe_trust_device($user->ID);
+            if (!$requires_passkey_2fa) {
+                $this->maybe_trust_device($user->ID);
+            }
             return $user;
+        }
+
+        if ($requires_passkey_2fa) {
+            return new \WP_Error('passkey_2fa_required', __('This account requires passkey verification for 2FA. Use the passkey option to continue.', 'acemedia-login-block'));
         }
 
         $two_factor_code = isset($_POST['2fa_code']) ? $_POST['2fa_code'] : '';
@@ -165,13 +178,20 @@ class Two_Factor {
         }
 
         // Verify method-specific code
-        $method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
+        if ($this->user_requires_passkey_2fa($user)) {
+            return new \WP_Error('passkey_2fa_required', __('This account requires passkey verification for 2FA.', 'acemedia-login-block'));
+        }
+
+        $method = $this->sanitize_2fa_method(get_user_meta($user->ID, '_acemedia_2fa_method', true));
         if ($method === 'auth_app') {
             return $this->verify_auth_app_code($user->ID, $code);
         } else if ($method === 'email') {
             return $this->verify_email_code($user->ID, $code);
+        } else if ($method === 'passkey') {
+            return new \WP_Error('passkey_2fa_required', __('This account is configured for passkey-based 2FA. Please use your passkey.', 'acemedia-login-block'));
         }
 
+        return $this->verify_email_code($user->ID, $code);
 
     }
 
@@ -212,7 +232,19 @@ class Two_Factor {
         }
 
         $is_2fa_enabled = isset($_POST['acemedia_2fa_enabled']) ? 1 : 0;
-        $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field($_POST['acemedia_2fa_method']) : 'email';
+        $selected_method = isset($_POST['acemedia_2fa_method']) ? $this->sanitize_2fa_method(sanitize_text_field($_POST['acemedia_2fa_method'])) : 'email';
+
+        $user = get_userdata($user_id);
+        $requires_passkey_2fa = $user ? $this->user_requires_passkey_2fa($user) : false;
+        if ($requires_passkey_2fa) {
+            $is_2fa_enabled = 1;
+            $selected_method = 'passkey';
+        }
+
+        if ($selected_method === 'passkey' && !$this->user_has_registered_passkey($user_id)) {
+            wp_send_json_error(['message' => __('Please register at least one passkey before selecting passkey as your 2FA method.', 'acemedia-login-block')]);
+            return;
+        }
 
         update_user_meta($user_id, '_acemedia_2fa_enabled', $is_2fa_enabled);
         update_user_meta($user_id, '_acemedia_2fa_method', $selected_method);
@@ -248,28 +280,34 @@ class Two_Factor {
             return new \WP_Error('invalid_username', __('Invalid username.', 'acemedia-login-block'), ['status' => 404]);
         }
 
-        $needs_2fa = false;
-        foreach ($user->roles as $role) {
-            if (get_option("acemedia_2fa_enabled_{$role}", false)) {
-                $needs_2fa = true;
-                break;
-            }
-        }
+        $needs_2fa = $this->user_requires_2fa($user);
+        $requires_passkey_2fa = $this->user_requires_passkey_2fa($user);
+        $has_registered_passkey = $this->user_has_registered_passkey($user->ID);
 
         $passkey_passwordless_allowed = $this->user_allows_passkey_passwordless($user);
 
         $is_2fa_enabled = (bool) get_user_meta($user->ID, '_acemedia_2fa_enabled', true);
-        $selected_method = get_user_meta($user->ID, '_acemedia_2fa_method', true);
-        $needs_setup = $needs_2fa && (!$is_2fa_enabled || !get_user_meta($user->ID, '_acemedia_2fa_setup_complete', true));
+        $selected_method = $this->sanitize_2fa_method(get_user_meta($user->ID, '_acemedia_2fa_method', true));
+        if ($requires_passkey_2fa) {
+            $selected_method = 'passkey';
+        }
+
+        $needs_setup = $needs_2fa && (
+            !$is_2fa_enabled
+            || !get_user_meta($user->ID, '_acemedia_2fa_setup_complete', true)
+            || ($requires_passkey_2fa && !$has_registered_passkey)
+        );
 
         $trusted_device = false;
-        if ($needs_2fa && !$needs_setup) {
+        if ($needs_2fa && !$needs_setup && !$requires_passkey_2fa) {
             $trusted_device = $this->is_trusted_device($user->ID);
         }
 
         return [
             'is2FAEnabled' => $is_2fa_enabled && $needs_2fa && !$trusted_device,
             'requires2FA' => $needs_2fa,
+            'requiresPasskey2FA' => $requires_passkey_2fa,
+            'hasRegisteredPasskey' => $has_registered_passkey,
             'passkeyPasswordlessAllowed' => $passkey_passwordless_allowed,
             'method' => $selected_method,
             'needs2FASetup' => $needs_setup,
@@ -277,9 +315,53 @@ class Two_Factor {
         ];
     }
 
+    private function user_requires_2fa($user) {
+        foreach ($user->roles as $role) {
+            if (
+                get_option("acemedia_2fa_enabled_{$role}", false)
+                || get_option("acemedia_passkey_2fa_required_{$role}", false)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function user_requires_passkey_2fa($user) {
+        foreach ($user->roles as $role) {
+            if (get_option("acemedia_passkey_2fa_required_{$role}", false)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function user_has_registered_passkey($user_id) {
+        return self::user_has_registered_passkey_static($user_id);
+    }
+
+    private static function user_has_registered_passkey_static($user_id) {
+        $passkeys = get_user_meta($user_id, '_acemedia_passkeys', true);
+        return is_array($passkeys) && !empty($passkeys);
+    }
+
+    private function sanitize_2fa_method($method) {
+        $allowed_methods = ['email', 'auth_app', 'passkey'];
+        if (!in_array($method, $allowed_methods, true)) {
+            return 'email';
+        }
+
+        return $method;
+    }
+
     private function user_allows_passkey_passwordless($user) {
         foreach ($user->roles as $role) {
-            if (get_option("acemedia_passkey_passwordless_{$role}", false)) {
+            if (
+                get_option("acemedia_passkey_passwordless_{$role}", false)
+                || get_option("acemedia_passkey_2fa_required_{$role}", false)
+            ) {
                 return true;
             }
         }
@@ -406,6 +488,53 @@ public function acemedia_add_2fa_to_login_form() {
                 return;
             }
 
+            const STATUS_CLASS = 'acemedia-login-status-message';
+            let isSubmitting = false;
+
+            function getStatusElement(form) {
+                if (!form) {
+                    return null;
+                }
+
+                let status = form.querySelector('.' + STATUS_CLASS);
+                if (!status) {
+                    status = document.createElement('p');
+                    status.className = STATUS_CLASS + ' description';
+                    status.style.marginTop = '10px';
+                    const submitRow = form.querySelector('.submit');
+                    if (submitRow && submitRow.parentNode) {
+                        submitRow.parentNode.insertBefore(status, submitRow);
+                    } else {
+                        form.appendChild(status);
+                    }
+                }
+
+                return status;
+            }
+
+            function showMessage(form, message, isError = true) {
+                const status = getStatusElement(form);
+                if (!status) {
+                    return;
+                }
+
+                status.textContent = message || '';
+                status.style.color = isError ? '#b32d2e' : '#1d2327';
+            }
+
+            function extractApiMessage(payload, fallback) {
+                if (payload && typeof payload === 'object') {
+                    if (typeof payload.message === 'string' && payload.message) {
+                        return payload.message;
+                    }
+                    if (payload.data && typeof payload.data.message === 'string' && payload.data.message) {
+                        return payload.data.message;
+                    }
+                }
+
+                return fallback;
+            }
+
             const loginForm = document.querySelector('#loginform');
             if (loginForm) {
                 loginForm.addEventListener('submit', handleLoginAttempt);
@@ -435,20 +564,26 @@ public function acemedia_add_2fa_to_login_form() {
 
                     const usernameInput = form.querySelector('input[name="log"]');
                     const username = usernameInput ? usernameInput.value : '';
+                    showMessage(form, '');
 
                     if (!username) {
-                        alert('Please enter your username.');
+                        showMessage(form, 'Please enter your username.');
                         return;
                     }
 
                     const sessionStart = Date.now();
-                    createHiddenInput('session_start', sessionStart);
+                    const sessionInput = form.querySelector('input[name="session_start"]') || createHiddenInput('session_start', sessionStart);
+                    sessionInput.value = sessionStart;
+                    if (!sessionInput.parentNode) {
+                        form.appendChild(sessionInput);
+                    }
 
                     fetch(aceLoginBlock.check2FAEndpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
+                        credentials: 'same-origin',
                         body: JSON.stringify({
                             username,
                             timestamp: sessionStart,
@@ -469,7 +604,7 @@ public function acemedia_add_2fa_to_login_form() {
                         } else if (data.is2FAEnabled) {
                             formInputs.twoFactorState.value = 'verification';
                             formInputs.twoFactorNonce.value = data.nonce;
-                            show2FAPrompt(form, username, formInputs);
+                            show2FAPrompt(form, username, formInputs, data);
                         } else {
                             formInputs.twoFactorState.value = 'disabled';
                             formInputs.twoFactorVerified.value = 'true';
@@ -478,7 +613,7 @@ public function acemedia_add_2fa_to_login_form() {
                     })
                     .catch(error => {
                         console.error('Error checking 2FA status:', error);
-                        alert('An error occurred while checking the 2FA status.');
+                        showMessage(form, 'Could not verify your 2FA status. Please try again.');
                         formInputs.twoFactorState.value = 'error';
                     });
                 }
@@ -497,23 +632,31 @@ public function acemedia_add_2fa_to_login_form() {
                 const twoFactorVerified = form.querySelector('input[name="two_factor_verified"]');
                 const twoFactorState = form.querySelector('input[name="two_factor_state"]');
 
+                if (isSubmitting) {
+                    return;
+                }
+
                 if (!twoFactorVerified || twoFactorVerified.value !== 'true') {
                     e.preventDefault();
-                    alert('Please complete two-factor authentication.');
+                    if (!twoFactorState || twoFactorState.value === 'verification') {
+                        showMessage(form, 'Please complete two-factor authentication.');
+                    }
                     return;
                 }
 
                 const sessionStart = form.querySelector('input[name="session_start"]');
                 if (sessionStart && (Date.now() - parseInt(sessionStart.value, 10)) > 1800000) {
                     e.preventDefault();
-                    alert('Session expired. Please refresh and try again.');
+                    showMessage(form, 'Session expired. Please refresh and try again.');
                     return;
                 }
             }
 
-            function show2FAPrompt(form, username, formInputs) {
+            function show2FAPrompt(form, username, formInputs, statusData) {
                 let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
                 if (!twoFAContainer) {
+                    const usesPasskeyMethod = !!(statusData && statusData.method === 'passkey');
+                    const requiresPasskeyOnly = !!(statusData && (statusData.requiresPasskey2FA || usesPasskeyMethod));
                     const pwdInput = form.querySelector('input[name="pwd"]');
                     const pwdLabel = form.querySelector('label[for="user_pass"]');
                     const pwdShowToggle = form.querySelector('span[data-show-password="true"]');
@@ -551,19 +694,29 @@ public function acemedia_add_2fa_to_login_form() {
                         pwdInput.parentElement.insertBefore(twoFALabel, pwdInput);
                     }
 
+                    if (requiresPasskeyOnly) {
+                        twoFALabel.textContent = aceLoginBlock.passkeyTwoFALabel || 'Use Passkey for 2FA';
+                        twoFAInput.style.display = 'none';
+                        twoFAInput.required = false;
+                        rememberLabel.style.display = 'none';
+                        showMessage(form, 'This account requires passkey verification for 2FA. Use your passkey to continue.', false);
+                    }
+
                     const insertAfterNode = rememberLabel || twoFAInput;
                     let passkeyButton = null;
                     if (aceLoginBlock.passkeysEnabled && window.PublicKeyCredential) {
-                        passkeyButton = document.getElementById('acemedia-passkey-login');
-                        if (!passkeyButton) {
-                            passkeyButton = document.createElement('button');
-                            passkeyButton.id = 'acemedia-passkey-login';
-                            passkeyButton.type = 'button';
-                            passkeyButton.className = 'button';
+                        const existingPasskeyLogin = document.getElementById('acemedia-passkey-login');
+                        if (existingPasskeyLogin && existingPasskeyLogin.closest('.acemedia-passkey-login')) {
+                            existingPasskeyLogin.closest('.acemedia-passkey-login').style.display = 'none';
                         }
 
+                        passkeyButton = document.createElement('button');
+                        passkeyButton.id = 'acemedia-passkey-2fa-login';
+                        passkeyButton.type = 'button';
+                        passkeyButton.className = 'button';
+
                         const passkeyLabel = aceLoginBlock.passkeyTwoFALabel
-                            || (passkeyButton.dataset ? passkeyButton.dataset.passkeyTwoFALabel : '')
+                            || (existingPasskeyLogin && existingPasskeyLogin.dataset ? existingPasskeyLogin.dataset.passkeyTwoFALabel : '')
                             || 'Use Passkey for 2FA';
                         passkeyButton.textContent = passkeyLabel;
                         passkeyButton.style.marginTop = '8px';
@@ -571,31 +724,47 @@ public function acemedia_add_2fa_to_login_form() {
                     }
 
                     const verify2FA = () => {
-                        const twoFACode = twoFAInput.value;
-                        if (!twoFACode) {
-                            alert('Please enter your authentication code.');
+                        if (requiresPasskeyOnly) {
+                            showMessage(form, 'This account requires passkey verification. Use the passkey button below.', true);
                             return;
                         }
+
+                        const twoFACode = twoFAInput.value;
+                        if (!twoFACode) {
+                            showMessage(form, 'Please enter your authentication code.');
+                            return;
+                        }
+
+                        showMessage(form, '');
 
                         fetch(aceLoginBlock.verify2FAEndpoint, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
+                            credentials: 'same-origin',
                             body: JSON.stringify({ code: twoFACode, username }),
                         })
-                        .then((response) => response.json())
+                        .then(async (response) => {
+                            const data = await response.json();
+                            if (!response.ok) {
+                                throw new Error(extractApiMessage(data, 'Authentication failed. Please try again.'));
+                            }
+                            return data;
+                        })
                         .then((data) => {
                             if (data.success) {
+                                formInputs.twoFactorVerified.value = 'true';
                                 form.dataset.twoFactorVerified = 'true';
+                                isSubmitting = true;
                                 form.submit();
                             } else {
-                                alert(data.message || 'Invalid authentication code. Please try again.');
+                                showMessage(form, extractApiMessage(data, 'Invalid authentication code. Please try again.'));
                             }
                         })
                         .catch((error) => {
                             console.error('2FA verification failed:', error);
-                            alert('An error occurred while verifying the authentication code.');
+                            showMessage(form, error.message || 'An error occurred while verifying the authentication code.');
                         });
                     };
 
@@ -611,7 +780,7 @@ public function acemedia_add_2fa_to_login_form() {
                         passkeyButton.addEventListener('click', async (e) => {
                             e.preventDefault();
                             if (!window.acemediaPasskeys || !window.acemediaPasskeys.startSecondFactor) {
-                                alert('Passkey support is not available in this browser.');
+                                showMessage(form, 'Passkey support is not available in this browser.');
                                 return;
                             }
 
@@ -619,20 +788,21 @@ public function acemedia_add_2fa_to_login_form() {
                             try {
                                 const token = await window.acemediaPasskeys.startSecondFactor(username);
                                 if (!token) {
-                                    alert('Passkey verification failed.');
+                                    showMessage(form, 'Passkey verification failed.');
                                     return;
                                 }
                                 if (!formInputs || !formInputs.passkeyToken || !formInputs.twoFactorVerified) {
-                                    alert('Unable to complete passkey verification. Please refresh and try again.');
+                                    showMessage(form, 'Unable to complete passkey verification. Please refresh and try again.');
                                     return;
                                 }
                                 formInputs.passkeyToken.value = token;
                                 formInputs.twoFactorVerified.value = 'true';
+                                isSubmitting = true;
                                 form.submit();
                         } catch (error) {
                             console.error('Passkey verification failed:', error);
                             const message = (error && (error.userMessage || error.message)) || 'An error occurred while verifying the passkey.';
-                            alert(message);
+                            showMessage(form, message);
                         } finally {
                             passkeyButton.disabled = false;
                         }

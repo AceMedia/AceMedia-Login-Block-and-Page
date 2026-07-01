@@ -57,6 +57,13 @@ class Settings_Page {
                 'description' => sprintf(__('Allow passkey passwordless login for %s role', 'acemedia-login-block'), $details['name']),
                 'default' => false,
             ]);
+
+            $role_passkey_2fa_required_key = "acemedia_passkey_2fa_required_{$role}";
+            register_setting('acemedia_login_block_options_group', $role_passkey_2fa_required_key, [
+                'type' => 'boolean',
+                'description' => sprintf(__('Require passkey as 2FA method for %s role', 'acemedia-login-block'), $details['name']),
+                'default' => false,
+            ]);
         }
 
         register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_enabled', [

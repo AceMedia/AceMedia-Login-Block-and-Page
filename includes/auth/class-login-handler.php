@@ -72,12 +72,15 @@ class Login_Handler {
 
             // Fetch the current value of the 2FA setting
             $is_2fa_enabled = (bool) get_option('acemedia_2fa_enabled', false);
+            $passkeys_enabled = (bool) get_option('acemedia_passkeys_enabled', true);
+            $passkeys_supported = $passkeys_enabled && class_exists('\\lbuchs\\WebAuthn\\WebAuthn');
 
             wp_localize_script('acemedia-login-frontend', 'aceLoginBlock', [
                 'loginUrl' => site_url('wp-login.php'),
                 'userRoles' => wp_get_current_user()->roles,
                 'redirectUrl' => site_url('/wp-admin'),
                 'is2FAEnabled' => $is_2fa_enabled,
+                'passkeysEnabled' => $passkeys_supported,
                 'twoFALabel' => __('Enter 2FA Code:', 'acemedia-login-block'),
                 'twoFAPlaceholder' => __('2FA Code', 'acemedia-login-block'),
                 'submit2FA' => __('Verify', 'acemedia-login-block'),
@@ -86,6 +89,9 @@ class Login_Handler {
                 'passkeyTwoFALabel' => __('Use Passkey for 2FA', 'acemedia-login-block'),
                 'verify2FAEndpoint' => rest_url('acemedia/v1/verify-2fa'),
                 'check2FAEndpoint' => rest_url('acemedia/v1/check-2fa'),
+                'passkeyLoginOptionsEndpoint' => rest_url('acemedia/v1/passkeys/login-options'),
+                'passkeyLoginEndpoint' => rest_url('acemedia/v1/passkeys/login'),
+                'csrfToken' => wp_create_nonce('wp_rest'),
                 'nonce' => wp_create_nonce('wp_rest'),
             ]);
         }

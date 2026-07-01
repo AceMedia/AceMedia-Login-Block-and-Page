@@ -13,6 +13,21 @@ if (!defined('ABSPATH')) {
 use AceLoginBlock\Auth\Two_Factor;
 
 
+$current_user = wp_get_current_user();
+$role_requires_passkey_2fa = false;
+if ($current_user && !empty($current_user->roles)) {
+    foreach ($current_user->roles as $role) {
+        if (get_option("acemedia_passkey_2fa_required_{$role}", false)) {
+            $role_requires_passkey_2fa = true;
+            break;
+        }
+    }
+}
+
+$registered_passkeys = get_user_meta(get_current_user_id(), '_acemedia_passkeys', true);
+$has_registered_passkey = is_array($registered_passkeys) && !empty($registered_passkeys);
+
+
 ?>
 
 <!-- Overlay and Warning -->
@@ -63,12 +78,22 @@ use AceLoginBlock\Auth\Two_Factor;
                 <th><label for="acemedia_2fa_method"><?php esc_html_e('Authentication Method', 'acemedia-login-block'); ?></label></th>
                 <td>
                     <select name="acemedia_2fa_method" id="acemedia_2fa_method">
-                        <option value="email"><?php esc_html_e('Email Code', 'acemedia-login-block'); ?></option>
-                        <option value="auth_app"><?php esc_html_e('Authentication App', 'acemedia-login-block'); ?></option>
+                        <option value="email" <?php disabled($role_requires_passkey_2fa, true); ?>><?php esc_html_e('Email Code', 'acemedia-login-block'); ?></option>
+                        <option value="auth_app" <?php disabled($role_requires_passkey_2fa, true); ?>><?php esc_html_e('Authentication App', 'acemedia-login-block'); ?></option>
+                        <option value="passkey"><?php esc_html_e('Passkey', 'acemedia-login-block'); ?></option>
                     </select>
                     <p class="description">
                         <?php esc_html_e('Email: Receive codes via email each time you log in.', 'acemedia-login-block'); ?><br>
-                        <?php esc_html_e('Authentication App: Use an app like Google Authenticator for offline code generation.', 'acemedia-login-block'); ?>
+                        <?php esc_html_e('Authentication App: Use an app like Google Authenticator for offline code generation.', 'acemedia-login-block'); ?><br>
+                        <?php esc_html_e('Passkey: Use a hardware key or platform authenticator (recommended).', 'acemedia-login-block'); ?>
+                    </p>
+                    <?php if ($role_requires_passkey_2fa) : ?>
+                        <p class="description" style="margin-top: 8px; color: #1d2327; font-weight: 600;">
+                            <?php esc_html_e('Your role requires passkey-based 2FA. Code-based methods are disabled.', 'acemedia-login-block'); ?>
+                        </p>
+                    <?php endif; ?>
+                    <p class="description" id="acemedia-passkey-setup-onboarding" style="display: none; margin-top: 8px; color: #b32d2e;">
+                        <?php esc_html_e('Before enabling passkey 2FA, register at least one passkey in the “Passkeys / Security Keys” section on your profile page.', 'acemedia-login-block'); ?>
                     </p>
                 </td>
             </tr>
@@ -80,6 +105,7 @@ use AceLoginBlock\Auth\Two_Factor;
                 </td>
             </tr>
         </table>
+        <p class="description" id="acemedia-2fa-setup-status" style="margin-top: 8px;"></p>
 
         <div class="submit-wrapper" style="margin-top: 20px; text-align: right;">
             <button type="button" class="button" id="download-2fa-backup-codes" style="margin-right: 10px;">
@@ -94,20 +120,45 @@ use AceLoginBlock\Auth\Two_Factor;
 
 <script>
 jQuery(document).ready(function($) {
+    const methodSelect = $('#acemedia_2fa_method');
+    const qrRow = $('#acemedia_2fa_qr_row');
+    const saveButton = $('.submit-wrapper .button-primary');
+    const onboarding = $('#acemedia-passkey-setup-onboarding');
+    const statusEl = $('#acemedia-2fa-setup-status');
+    const roleRequiresPasskey = <?php echo $role_requires_passkey_2fa ? 'true' : 'false'; ?>;
+    const hasRegisteredPasskey = <?php echo $has_registered_passkey ? 'true' : 'false'; ?>;
+
+    function showStatus(message, isError = false) {
+        statusEl.text(message || '');
+        statusEl.css('color', isError ? '#b32d2e' : '#1d2327');
+    }
+
+    function updateMethodUI() {
+        if (roleRequiresPasskey && methodSelect.val() !== 'passkey') {
+            methodSelect.val('passkey');
+        }
+
+        const method = methodSelect.val();
+        const showQr = method === 'auth_app' && !roleRequiresPasskey;
+        const needsPasskeyOnboarding = method === 'passkey' && !hasRegisteredPasskey;
+
+        qrRow.toggle(showQr);
+        onboarding.toggle(needsPasskeyOnboarding);
+        saveButton.prop('disabled', needsPasskeyOnboarding);
+
+        if (needsPasskeyOnboarding) {
+            showStatus('<?php echo esc_js(__('Register a passkey first, then save your 2FA settings.', 'acemedia-login-block')); ?>', true);
+        } else {
+            showStatus('');
+        }
+    }
+
     // Show modal immediately
     $('#acemedia-2fa-setup-modal').show();
 
     // Handle method change
-    $('#acemedia_2fa_method').on('change', function() {
-        const qrRow = $('#acemedia_2fa_qr_row');
-        if (this.value === 'auth_app') {
-            qrRow.show();
-            // For data URI we don't need to refresh by appending timestamp
-            // Just show the QR code
-        } else {
-            qrRow.hide();
-        }
-    });
+    methodSelect.on('change', updateMethodUI);
+    updateMethodUI();
 
     // Handle backup codes download
     $('#download-2fa-backup-codes').on('click', function() {
@@ -133,11 +184,18 @@ jQuery(document).ready(function($) {
 });
 
 function acemediaSave2FASetup() {
+    const hasRegisteredPasskey = <?php echo $has_registered_passkey ? 'true' : 'false'; ?>;
+    const selectedMethod = document.getElementById('acemedia_2fa_method').value;
+    if (selectedMethod === 'passkey' && !hasRegisteredPasskey) {
+        alert('<?php echo esc_js(__('Please register at least one passkey in your profile before enabling passkey-based 2FA.', 'acemedia-login-block')); ?>');
+        return;
+    }
+
     const formData = new FormData();
     formData.append('action', 'acemedia_save_2fa_setup');
     formData.append('_ajax_nonce', '<?php echo wp_create_nonce("acemedia_2fa_setup"); ?>');
     formData.append('acemedia_2fa_enabled', '1');
-    formData.append('acemedia_2fa_method', document.getElementById('acemedia_2fa_method').value);
+    formData.append('acemedia_2fa_method', selectedMethod);
 
     fetch(ajaxurl, {
         method: 'POST',
