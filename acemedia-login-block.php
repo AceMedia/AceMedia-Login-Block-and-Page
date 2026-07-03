@@ -142,13 +142,7 @@ add_action('admin_menu', 'acemedia_capture_admin_pages');
  * Enqueue assets for the blocks.
  */
 function acemedia_login_block_enqueue_assets() {
-    wp_enqueue_script(
-        'acemedia-login-toggle',
-        plugin_dir_url( __FILE__ ) . 'build/login-toggle.js',
-        array(),
-        '1.0.0',
-        true
-    );
+    // login-toggle.js is not part of the build; enqueue removed to avoid a 404 in the editor.
 
     wp_enqueue_script(
         'acemedia-login-block-editor',
