@@ -1,4 +1,19 @@
 document.addEventListener('DOMContentLoaded', function () {
+    const loginForm = document.querySelector('.wp-block-login-form form');
+    if (loginForm) {
+        loginForm.action = aceLoginBlock.loginUrl;
+        let redirectInput = loginForm.querySelector('input[name="redirect_to"]');
+        if (!redirectInput) {
+            redirectInput = document.createElement('input');
+            redirectInput.type = 'hidden';
+            redirectInput.name = 'redirect_to';
+            loginForm.appendChild(redirectInput);
+        }
+        const currentUrl = window.location.href.split('#')[0];
+        const postLoginUrl = aceLoginBlock.postLoginUrl || '';
+        redirectInput.value = window.location.pathname.indexOf('wp-login.php') !== -1 && postLoginUrl ? postLoginUrl : currentUrl;
+    }
+
     if (typeof aceLoginBlock === 'undefined' || !aceLoginBlock.check2FAEndpoint || !aceLoginBlock.verify2FAEndpoint) {
         return;
     }
@@ -452,19 +467,5 @@ loginButton.addEventListener('click', (e) => {
                 }
             });
         }
-    }
-
-    // Set form action and add nonce
-    const loginForm = document.querySelector('.wp-block-login-form form');
-    if (loginForm) {
-        loginForm.action = aceLoginBlock.loginUrl;
-        let redirectInput = loginForm.querySelector('input[name="redirect_to"]');
-        if (!redirectInput) {
-            redirectInput = document.createElement('input');
-            redirectInput.type = 'hidden';
-            redirectInput.name = 'redirect_to';
-            loginForm.appendChild(redirectInput);
-        }
-        redirectInput.value = aceLoginBlock.redirectUrl || '/wp-admin';
     }
 });

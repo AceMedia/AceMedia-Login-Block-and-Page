@@ -79,6 +79,7 @@ class Login_Handler {
                 'loginUrl' => site_url('wp-login.php'),
                 'userRoles' => wp_get_current_user()->roles,
                 'redirectUrl' => site_url('/wp-admin'),
+                'postLoginUrl' => $custom_page_id ? get_permalink($custom_page_id) : '',
                 'is2FAEnabled' => $is_2fa_enabled,
                 'passkeysEnabled' => $passkeys_supported,
                 'twoFALabel' => __('Enter 2FA Code:', 'acemedia-login-block'),
