@@ -36,6 +36,9 @@ $front_end_pages = get_pages();
             <tr valign="top">
                 <th scope="row"><?php esc_html_e('Passkeys / Security Keys', 'acemedia-login-block'); ?></th>
                 <td>
+                    <?php if (function_exists('acemedia_login_block_passkeys_available') && !acemedia_login_block_passkeys_available()): ?>
+                        <p class="description" style="color:#b32d2e; margin: 0 0 8px;"><?php esc_html_e('Passkeys are not available on this server because PHP’s OpenSSL extension is missing, so they are switched off whatever this setting says. Everything else keeps working. Ask your host to enable OpenSSL, then passkeys return by themselves.', 'acemedia-login-block'); ?></p>
+                    <?php endif; ?>
                     <label>
                         <input type="checkbox" name="acemedia_passkeys_enabled" value="1" <?php checked(get_option('acemedia_passkeys_enabled', true), true); ?> />
                         <?php esc_html_e('Enable passkeys on wp-login.php', 'acemedia-login-block'); ?>

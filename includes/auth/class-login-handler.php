@@ -59,7 +59,7 @@ class Login_Handler {
             // Fetch the current value of the 2FA setting
             $is_2fa_enabled = (bool) get_option('acemedia_2fa_enabled', false);
             $passkeys_enabled = (bool) get_option('acemedia_passkeys_enabled', true);
-            $passkeys_supported = $passkeys_enabled && class_exists('\\lbuchs\\WebAuthn\\WebAuthn');
+            $passkeys_supported = $passkeys_enabled && acemedia_login_block_passkeys_available();
 
             wp_localize_script('acemedia-login-frontend', 'aceLoginBlock', [
                 'loginUrl' => site_url('wp-login.php'),

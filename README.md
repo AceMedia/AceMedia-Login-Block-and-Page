@@ -13,19 +13,21 @@
 **Contributors:** Shane Rounce of AceMedia.ninja
 **Tags:** login, block, custom login, WordPress, Gutenberg, security
 **Requires at least:** 6.6
-**Tested up to:** 6.9
+**Tested up to:** 7.1
 **Requires PHP:** 8.2
-**Candidate version:** 0.429.0
+**Version:** 0.430.0
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
 Customise your WordPress login page with a fully-integrated Gutenberg block, giving you complete control over the design and functionality.
 
-## Candidate status
+## Requirements and recovery
 
-Version 0.429.0 is a local security and compatibility candidate, not a published release. PHP 8.2+, OpenSSL and sodium are required. WordPress 6.9 browser checks cover native and custom-page login, virtual WebAuthn assertions, redirects and a public 0.426.0 upgrade. These tests do not certify every browser, authenticator or plugin combination; the full compatibility matrix and security review remain release gates.
+PHP 8.2 or later. Passkeys also need PHP's OpenSSL extension. If it is missing, passkeys switch themselves off and everything else, including email codes, authenticator apps, backup codes and login lockout, keeps working. An account that needs a passkey for its second factor is refused with a clear message, so the policy is never quietly dropped.
 
-If dependencies become unavailable, the plugin blocks new authentication rather than silently dropping second-factor protection. Restore the supported runtime and complete package through hosting access. Public requests and existing sessions are not intentionally blocked.
+If PHP is older than 8.2 or the bundled libraries cannot load, the plugin blocks new logins rather than silently dropping second-factor protection. Restore the supported runtime and the complete package through your hosting account. Public pages and existing sessions are not intentionally blocked.
+
+I have tested it on WordPress 6.6, 6.9 and 7.1. The details are in [docs/release-validation.md](docs/release-validation.md). They do not cover every browser, authenticator or plugin combination, so please tell me about anything that misbehaves.
 
 ## Description
 

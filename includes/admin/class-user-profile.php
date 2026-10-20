@@ -45,7 +45,10 @@ class User_Profile {
         ?>
         <input type="hidden" name="acemedia_2fa_settings_present" value="1" />
         <h3><?php esc_html_e('Two-Factor Authentication', 'acemedia-login-block'); ?></h3>
-        <?php if ($role_requires_2fa): ?>
+        <?php if (function_exists('acemedia_login_block_passkeys_available') && !acemedia_login_block_passkeys_available()): ?>
+            <p class="description" style="color:#b32d2e;"><?php esc_html_e('Passkeys are not available on this server because PHP’s OpenSSL extension is missing. Email, authenticator app and backup codes still work. Ask your host to enable OpenSSL to use passkeys.', 'acemedia-login-block'); ?></p>
+        <?php endif; ?>
+                <?php if ($role_requires_2fa): ?>
             <p class="description"><?php esc_html_e('Your role requires 2FA. Please enable and complete setup below.', 'acemedia-login-block'); ?></p>
         <?php endif; ?>
         <?php if ($role_requires_passkey_2fa): ?>

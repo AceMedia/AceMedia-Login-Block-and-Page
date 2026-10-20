@@ -4,7 +4,7 @@ Tags: login, block, custom login, WordPress, Gutenberg
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.429.0
+Stable tag: 0.430.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,10 +12,9 @@ Customise your WordPress login page with a fully-integrated Gutenberg block, giv
 
 == Description ==
 
-Requires PHP 8.2 or later with OpenSSL and sodium. Tested on WordPress 6.6, 6.9 and 7.1.
+Requires PHP 8.2 or later. Passkeys also need PHP's OpenSSL extension; if it is missing, passkeys switch themselves off and everything else keeps working. Tested on WordPress 6.6, 6.9 and 7.1.
 
-If the runtime is downgraded or dependencies are unavailable, new logins are blocked to preserve authentication policy. Restore PHP and the complete plugin package through your hosting account. Existing sessions and public pages remain available where WordPress itself supports that runtime.
-
+If PHP is older than 8.2 or the bundled libraries cannot load, new logins are refused rather than quietly dropping your second-factor policy. Restore the supported runtime and the complete plugin package through your hosting account. Existing sessions and public pages remain available where WordPress itself supports that runtime.
 
 Ace Login Block allows you to replace the default WordPress login page with a custom page of your choosing, all designed and managed within the block editor. This lets you create a branded login experience for your users while leveraging the flexibility and ease of Gutenberg.
 
@@ -32,6 +31,15 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 * Remembered devices that skip 2FA only (password still required).
 * Login lockout after repeated failed attempts.
 * Passkey policy settings: RP ID override, attestation preference, and per-role passwordless control.
+
+*Security:*
+
+* Email codes expire after five minutes and can only be used once.
+* Second-factor codes are checked in constant time, with a low hourly attempt limit.
+* Authenticator app secrets are encrypted at rest with libsodium.
+* The 2FA endpoints do not reveal whether a username exists.
+* A passkey used instead of a password has to pass user verification.
+* If a factor an account depends on cannot be used, that account is refused with a clear message. The policy is never quietly dropped.
 
 Ace Login Block provides a seamless way to craft unique, branded login experiences while ensuring compatibility with WordPress’s login handling.
 
@@ -75,6 +83,13 @@ Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 2. The same fictional reading-room login page on mobile.
 
 == Changelog ==
+
+= 0.430.0 =
+Release Date: 2026-10-20
+* Passkeys now switch themselves off when PHP's OpenSSL extension is missing, instead of blocking every login. Email codes, authenticator apps, backup codes and lockout keep working, and an admin notice explains what is off.
+* An account that needs a passkey for its second factor is refused with a clear message while OpenSSL is missing. No second factor is quietly dropped.
+* Sodium is no longer a separate requirement. WordPress provides a fallback, and the plugin loads it if it is not already there.
+* A clearer description of the security features.
 
 = 0.429.0 =
 Release Date: 2026-10-20

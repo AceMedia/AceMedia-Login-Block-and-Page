@@ -19,7 +19,26 @@ class Admin_Notices {
      */
     public function __construct() {
         add_action('admin_notices', [$this, 'display_2fa_setup_notice']);
+        add_action('admin_notices', [$this, 'display_passkeys_unavailable_notice']);
         add_action('admin_init', [$this, 'handle_clear_2fa_logs']);
+    }
+
+    /**
+     * Tell administrators when passkeys are switched off because PHP has no OpenSSL.
+     */
+    public function display_passkeys_unavailable_notice() {
+        if (!function_exists('acemedia_login_block_passkeys_available') || acemedia_login_block_passkeys_available()) {
+            return;
+        }
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        $id = $screen ? $screen->id : '';
+        if (!in_array($id, ['plugins', 'profile', 'users', 'toplevel_page_acemedia-login-block-settings'], true) && false === strpos($id, 'acemedia')) {
+            return;
+        }
+        echo '<div class="notice notice-warning"><p>' . esc_html__('Ace Login Block: passkeys are switched off because this server’s PHP has no OpenSSL extension. Everything else, including email codes, authenticator apps, backup codes and login lockout, keeps working. Ask your host to enable OpenSSL and passkeys will return by themselves.', 'acemedia-login-block') . '</p></div>';
     }
 
     /**

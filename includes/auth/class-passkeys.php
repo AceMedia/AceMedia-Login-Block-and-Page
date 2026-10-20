@@ -22,7 +22,22 @@ class Passkeys {
     private const TRANSIENT_2FA = 'acemedia_passkey_2fa_';
     private const TRANSIENT_PASSWORD_FACTOR = 'acemedia_passkey_pwd_';
 
+    /**
+     * Passkeys need OpenSSL and the WebAuthn library. The main plugin file defines the shared
+     * check; fall back to the same test if this class is ever loaded on its own.
+     */
+    private static function runtime_available() {
+        if (function_exists('acemedia_login_block_passkeys_available')) {
+            return acemedia_login_block_passkeys_available();
+        }
+        return extension_loaded('openssl') && class_exists(WebAuthn::class);
+    }
+
     public function __construct() {
+        // Without OpenSSL passkeys cannot be verified, so register no routes, forms or filters.
+        if (!self::runtime_available()) {
+            return;
+        }
         add_action('rest_api_init', [$this, 'register_routes']);
         add_action('acemedia_passkey_claim_cleanup', [__CLASS__, 'cleanup_expired_claims']);
         add_action('login_form', [$this, 'render_login_ui'], 20);
@@ -1213,7 +1228,7 @@ class Passkeys {
     }
 
     private function is_enabled() {
-        if (!class_exists(WebAuthn::class)) {
+        if (!self::runtime_available()) {
             return false;
         }
         return (bool) get_option('acemedia_passkeys_enabled', true);

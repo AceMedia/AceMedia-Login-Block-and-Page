@@ -125,6 +125,10 @@ class Two_Factor {
             return $user;
         }
 
+        if ($requires_passkey_2fa && $this->passkeys_unavailable()) {
+            return $this->passkeys_unavailable_error();
+        }
+
         if ($requires_passkey_2fa && !$this->user_has_registered_passkey($user->ID)) {
             return new \WP_Error(
                 'passkey_required_not_configured',
@@ -215,6 +219,17 @@ class Two_Factor {
         });
     }
 
+    private function passkeys_unavailable() {
+        return !function_exists('acemedia_login_block_passkeys_available') || !acemedia_login_block_passkeys_available();
+    }
+
+    private function passkeys_unavailable_error() {
+        return new \WP_Error(
+            'passkeys_unavailable',
+            __('Your account needs a passkey, but passkeys are not available on this server because PHP\'s OpenSSL extension is missing. Please ask your host to enable OpenSSL.', 'acemedia-login-block')
+        );
+    }
+
     private function verify_user_code_locked($user, $code) {
         // Rate limiting
         if (!$this->check_rate_limit($user->ID)) {
@@ -222,6 +237,9 @@ class Two_Factor {
         }
 
         if ($this->user_requires_passkey_2fa($user)) {
+            if ($this->passkeys_unavailable()) {
+                return $this->passkeys_unavailable_error();
+            }
             return new \WP_Error('passkey_2fa_required', __('This account requires passkey verification for 2FA.', 'acemedia-login-block'));
         }
 
@@ -237,6 +255,9 @@ class Two_Factor {
         } else if ($method === 'email') {
             return $this->verify_email_code($user->ID, $code);
         } else if ($method === 'passkey') {
+            if ($this->passkeys_unavailable()) {
+                return $this->passkeys_unavailable_error();
+            }
             return new \WP_Error('passkey_2fa_required', __('This account is configured for passkey-based 2FA. Please use your passkey.', 'acemedia-login-block'));
         }
 

@@ -5,7 +5,7 @@
  * Requires at least: 6.6
  * Tested up to:      7.1
  * Requires PHP:      8.2
- * Version:           0.429.0
+ * Version:           0.430.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -29,7 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Restore the supported runtime/package using hosting access to recover login.
  */
 function acemedia_login_block_runtime_error() {
-    return new WP_Error('acemedia_auth_unavailable', __('Login is temporarily unavailable because Ace Login Block requires PHP 8.2 or later, OpenSSL, sodium and its installed dependencies. Please contact the site administrator.', 'acemedia-login-block'));
+    return new WP_Error('acemedia_auth_unavailable', __('Login is temporarily unavailable because Ace Login Block requires PHP 8.2 or later, sodium and its installed dependencies. Please contact the site administrator.', 'acemedia-login-block'));
 }
 
 function acemedia_login_block_runtime_notice() {
@@ -38,8 +38,36 @@ function acemedia_login_block_runtime_notice() {
     }
 }
 
+/**
+ * Optional features.
+ *
+ * Passkeys need PHP's OpenSSL extension, which WordPress cannot stand in for. When it is
+ * missing, only passkeys are switched off and everything else keeps working. An account
+ * that depends on a passkey is refused with a clear message instead of having its second
+ * factor quietly dropped.
+ *
+ * @return bool
+ */
+function acemedia_login_block_openssl_available() {
+    $available = extension_loaded('openssl') && function_exists('openssl_verify');
+    return (bool) apply_filters('acemedia_login_block_openssl_available', $available);
+}
+
+function acemedia_login_block_passkeys_available() {
+    return acemedia_login_block_openssl_available() && class_exists('\\lbuchs\\WebAuthn\\WebAuthn');
+}
+
+// Sodium: WordPress ships a pure PHP fallback and loads it itself. Load it here too in the
+// unlikely case it has not been, so the authenticator-app secrets can still be encrypted.
+if (
+    (!function_exists('sodium_crypto_secretbox') || !function_exists('sodium_crypto_secretbox_open'))
+    && defined('WPINC')
+    && is_readable(ABSPATH . WPINC . '/sodium_compat/autoload.php')
+) {
+    require_once ABSPATH . WPINC . '/sodium_compat/autoload.php';
+}
+
 $acemedia_runtime_ready = PHP_VERSION_ID >= 80200
-    && extension_loaded('openssl')
     && function_exists('sodium_crypto_secretbox')
     && function_exists('sodium_crypto_secretbox_open')
     && is_readable(__DIR__ . '/vendor/autoload.php');
@@ -47,7 +75,6 @@ if ($acemedia_runtime_ready) {
     try {
         require_once __DIR__ . '/vendor/autoload.php';
         $acemedia_runtime_ready = class_exists('OTPHP\\TOTP')
-            && class_exists('lbuchs\\WebAuthn\\WebAuthn')
             && class_exists('Endroid\\QrCode\\QrCode');
     } catch (Throwable $error) {
         $acemedia_runtime_ready = false;
@@ -63,7 +90,7 @@ if (!$acemedia_runtime_ready) {
 
 
 // Define plugin constants
-define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.429.0');
+define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.430.0');
 define('ACEMEDIA_LOGIN_BLOCK_PATH', plugin_dir_path(__FILE__));
 define('ACEMEDIA_LOGIN_BLOCK_URL', plugin_dir_url(__FILE__));
 
@@ -429,7 +456,7 @@ function acemedia_enqueue_admin_login_script() {
         // Fetch the current value of the 2FA setting
         $is_2fa_enabled = (bool) get_option('acemedia_2fa_enabled', false);
         $passkeys_enabled = (bool) get_option('acemedia_passkeys_enabled', true);
-        $passkeys_supported = $passkeys_enabled && class_exists('\lbuchs\WebAuthn\WebAuthn');
+        $passkeys_supported = $passkeys_enabled && acemedia_login_block_passkeys_available();
 
         wp_localize_script('acemedia-login-frontend', 'aceLoginBlock', [
             'loginUrl' => site_url('wp-login.php'),
