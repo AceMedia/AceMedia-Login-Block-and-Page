@@ -38,6 +38,7 @@ class Login_Lockout {
             return new \WP_Error(
                 'acemedia_login_locked',
                 sprintf(
+                    /* translators: 1: minutes until login is allowed, 2: local unlock time. */
                     __('Too many failed login attempts. Try again in %1$d minute(s) (at %2$s).', 'acemedia-login-block'),
                     max(1, $remaining_minutes),
                     $unlock_time

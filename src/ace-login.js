@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
+    if (typeof aceLoginBlock === 'undefined') {
+        return;
+    }
     const loginForm = document.querySelector('.wp-block-login-form form');
     if (loginForm) {
         loginForm.action = aceLoginBlock.loginUrl;
@@ -11,7 +14,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         const currentUrl = window.location.href.split('#')[0];
         const postLoginUrl = aceLoginBlock.postLoginUrl || '';
-        redirectInput.value = window.location.pathname.indexOf('wp-login.php') !== -1 && postLoginUrl ? postLoginUrl : currentUrl;
+        const requestedRedirect = new URL(window.location.href).searchParams.get('redirect_to');
+        // The server's safe redirect handling remains authoritative.
+        redirectInput.value = requestedRedirect || (window.location.pathname.indexOf('wp-login.php') !== -1 && postLoginUrl ? postLoginUrl : currentUrl);
     }
 
     if (typeof aceLoginBlock === 'undefined' || !aceLoginBlock.check2FAEndpoint || !aceLoginBlock.verify2FAEndpoint) {
@@ -19,9 +24,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Handle login button click
-    const loginButton = document.querySelector('.wp-block-acemedia-login-block form .wp-block-button__link');
+    const loginButton = document.querySelector('.wp-block-login-form form .wp-block-button__link, .wp-block-acemedia-login-block form .wp-block-button__link');
     if (loginButton) {
         loginButton.addEventListener('click', handleLoginAttempt);
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLoginAttempt);
     }
 
     const STATUS_CLASS = 'acemedia-login-status-message';
@@ -211,8 +220,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 passkeyToken: createHiddenInput('acemedia_passkey_token', '')
             };
     
-            Object.values(formInputs).forEach(input => {
-                if (!form.querySelector(`input[name="${input.name}"]`)) {
+            Object.entries(formInputs).forEach(([key, input]) => {
+                const existing = form.querySelector(`input[name="${input.name}"]`);
+                if (existing) {
+                    formInputs[key] = existing;
+                } else {
                     form.appendChild(input);
                 }
             });
@@ -243,18 +255,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 credentials: 'same-origin',
                 body: JSON.stringify({ 
                     username,
+                    password: form.querySelector('input[name="pwd"]')?.value || '',
+                    passwordToken: form.querySelector('input[name="acemedia_passkey_password_token"]')?.value || '',
                     timestamp: sessionStart,
                     csrf_token: aceLoginBlock.csrfToken
                 }),
             })
-            .then(response => {
+            .then(async response => {
+                const data = await response.json();
                 if (!response.ok) {
-                    throw new Error('Network response was not ok');
+                    throw new Error(extractApiMessage(data, 'Unable to sign in with those details. Please try again.'));
                 }
-                return response.json();
+                return data;
             })
             .then(data => {
-                if (data.needs2FASetup) {
+                if (data.needs2FASetup && !data.requires2FA) {
                     formInputs.twoFactorState.value = 'setup';
                     formInputs.twoFactorVerified.value = 'true';
                     form.submit();
@@ -270,7 +285,7 @@ document.addEventListener('DOMContentLoaded', function () {
             })
             .catch(error => {
                 console.error('Error checking 2FA status:', error);
-                showMessage(form, 'Could not verify your 2FA status. Please try again.');
+                showMessage(form, error.message || 'Unable to sign in. Please try again.');
                 // Reset form state
                 formInputs.twoFactorState.value = 'error';
             });
@@ -395,34 +410,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 showMessage(form, '');
     
-                fetch(aceLoginBlock.verify2FAEndpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ code: twoFACode, username }),
-                })
-                .then(async (response) => {
-                    const data = await response.json();
-                    if (!response.ok) {
-                        throw new Error(extractApiMessage(data, 'Authentication failed. Please try again.'));
-                    }
-                    return data;
-                })
-                .then((data) => {
-                    if (data.success) {
-                        formInputs.twoFactorVerified.value = 'true';
-                        form.dataset.twoFactorVerified = 'true';
-                        form.submit();
-                    } else {
-                        showMessage(form, extractApiMessage(data, 'Invalid authentication code. Please try again.'));
-                    }
-                })
-                .catch((error) => {
-                    console.error('2FA verification failed:', error);
-                    showMessage(form, error.message || 'An error occurred while verifying the authentication code.');
-                });
+                // The final password login consumes the code exactly once server-side.
+                formInputs.twoFactorVerified.value = 'true';
+                form.dataset.twoFactorVerified = 'true';
+                form.submit();
             };
     
             // Replace verify button click handler with login button handler:

@@ -1,16 +1,21 @@
 === Ace Login Block ===
-Contributors: shanerounce  
-Tags: login, block, custom login, WordPress, Gutenberg  
-Requires at least: 6.6 
-Tested up to: 7.0
-Requires PHP: 8.0
-Stable tag: 0.428.0  
-License: GPLv2 or later  
-License URI: https://www.gnu.org/licenses/gpl-2.0.html  
+Contributors: shanerounce
+Tags: login, block, custom login, WordPress, Gutenberg
+Requires at least: 6.6
+Tested up to: 7.1
+Requires PHP: 8.2
+Stable tag: 0.429.0
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Customize your WordPress login page with a fully-integrated Gutenberg block, giving you complete control over the design and functionality.
+Customise your WordPress login page with a fully-integrated Gutenberg block, giving you complete control over the design and functionality.
 
 == Description ==
+
+Requires PHP 8.2 or later with OpenSSL and sodium. Tested on WordPress 6.6, 6.9 and 7.1.
+
+If the runtime is downgraded or dependencies are unavailable, new logins are blocked to preserve authentication policy. Restore PHP and the complete plugin package through your hosting account. Existing sessions and public pages remain available where WordPress itself supports that runtime.
+
 
 Ace Login Block allows you to replace the default WordPress login page with a custom page of your choosing, all designed and managed within the block editor. This lets you create a branded login experience for your users while leveraging the flexibility and ease of Gutenberg.
 
@@ -19,10 +24,10 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 * Replace the default WordPress login page with a custom block-based design.
 * Full integration with the block editor, giving you complete control over the login page layout.
 * Allow the default WordPress login functionality for POST requests to ensure smooth login submissions.
-* Customize redirects and add additional fields or branding elements to the login page.
-* Prevent further execution of the default `wp-login.php` after your custom login template loads.
+* Customise redirects and add additional fields or branding elements to the login page.
+* Preserve core password reset and recovery screens when using a custom login page.
 * Role-based redirects and per-role 2FA requirements.
-* Passkeys (security keys) for passwordless login and as a 2FA bypass.
+* Passkeys (security keys) for passwordless login and as a second factor.
 * Email and authenticator app 2FA, plus backup codes.
 * Remembered devices that skip 2FA only (password still required).
 * Login lockout after repeated failed attempts.
@@ -34,13 +39,13 @@ Ace Login Block provides a seamless way to craft unique, branded login experienc
 
 This section describes how to install the plugin and get it working.
 
-1. Upload the plugin files to the `/wp-content/plugins/ace-login-block` directory, or install the plugin through the WordPress plugin screen directly.
+1. Upload the plugin files to the `/wp-content/plugins/acemedia-login-block` directory, or install the plugin through the WordPress plugin screen directly.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
 3. Navigate to the "Ace Login Block" settings and select the page to use for your custom login page.
 
 == Frequently Asked Questions ==
 
-= How do I customize my login page? =
+= How do I customise my login page? =
 
 Once the plugin is activated, go to the "Ace Login Block" settings in your WordPress dashboard and select the page you want to use as your custom login page. You can then use the block editor to design the page.
 
@@ -50,7 +55,7 @@ Yes, WordPress will continue to handle all login submissions via POST requests, 
 
 = Can I add custom fields to my login page? =
 
-Yes, you can add custom blocks, text, images, or any other elements within the block editor to fully customize the layout of your login page.
+Yes, you can add custom blocks, text, images, or any other elements within the block editor to fully customise the layout of your login page.
 
 = What happens if I disable the plugin? =
 
@@ -64,7 +69,21 @@ No. Remembered devices only skip the 2FA step. Password entry is still required.
 
 Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 
+== Screenshots ==
+
+1. Fictional Nightjar Reading Room login page on desktop, using Twenty Twenty-Five with demo theme styling.
+2. The same fictional reading-room login page on mobile.
+
 == Changelog ==
+
+= 0.429.0 =
+Release Date: 2026-10-20
+* Correct PHP requirements and fail closed when authentication dependencies are unavailable.
+* Preserve core login actions and other integrations' authentication callbacks.
+* Require user verification for passkeys used in place of a password.
+* Correct single-use second-factor verification and personal enrolment policy.
+* Tested with WordPress 7.1.
+
 
 = 0.428.0 =
 Release Date: 2026-07-01
@@ -132,15 +151,21 @@ Release Date: 2024-10-11 (Pre-Release)
     - Custom Login Page: Replace the default wp-login.php form with a page created in the block editor.
     - Post Request Handling: Securely handles login form submissions.
     - Seamless Template Loading: Automatically loads the selected custom page template.
-    - Block Editor Integration: Customize your login page using blocks.
+    - Block Editor Integration: Customise your login page using blocks.
     - Debugging: Debug messages included to assist with development.
 * Important Note: Known issues with form redirection in this version, recommended to use v0.421 for better performance.
 
 == Source ==
 
-The source code for this plugin, including unminified JavaScript and CSS, is available on GitHub:  
-[GitHub Repository](https://github.com/AceMedia/AceMedia-Login-Block-and-Page)
+The source code for this plugin, including unminified JavaScript and CSS, is available on GitHub:
+[GitHub Repository](https://github.com/AceMedia/WordPress-Login-Block-and-Page)
 
 == License ==
 
 This plugin is licensed under the GPLv2 (or later) as it is required to follow WordPress.org repository rules.
+
+== Source and contributions ==
+
+Source and build instructions: https://github.com/AceMedia/WordPress-Login-Block-and-Page
+
+Public bug reports and feature requests are welcome in GitHub Issues. Ace Media maintains the upstream project and invites code contributors; please discuss changes before submitting a pull request. The GPL-2.0-or-later licence preserves your rights to use, study, modify and redistribute the code.

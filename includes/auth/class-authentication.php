@@ -10,8 +10,8 @@ class Authentication {
      * Initialize the class
      */
     public function __construct() {
-        add_action('wp_login', [$this, 'login_redirect'], 10, 2);
-        add_action('wp_logout', [$this, 'logout_redirect']);
+        add_filter('login_redirect', [$this, 'login_redirect'], 10, 3);
+        add_filter('logout_redirect', [$this, 'logout_redirect'], 10, 3);
         add_action('init', [$this, 'handle_logout']);
         add_filter('login_title', [$this, 'login_block_login_title']);
     }
@@ -19,47 +19,31 @@ class Authentication {
     /**
      * Handle the login redirect after a user logs in
      */
-    public function login_redirect($user_login, $user) {
-        // Default redirect URL if none is specified for the user’s role
-        $redirect_url = isset($_POST['redirect_to']) ? esc_url(sanitize_text_field(wp_unslash($_POST['redirect_to']))) : admin_url();
-
-        // Check for role-specific redirects
+    public function login_redirect($redirect_url, $requested_redirect_url, $user) {
+        if (!$user instanceof \WP_User) {
+            return $redirect_url;
+        }
         foreach ($user->roles as $role) {
-            $role_redirect_key = "acemedia_login_block_redirect_{$role}"; // Option key for the redirect URL
-            $role_redirect_url = get_option($role_redirect_key);
-
-            // If a role-specific redirect URL is found, set it as the redirect URL
+            $role_redirect_url = get_option("acemedia_login_block_redirect_{$role}");
             if (!empty($role_redirect_url)) {
-                $redirect_url = esc_url($role_redirect_url);
-                break; // Stop after the first matching role redirect
+                return wp_validate_redirect($role_redirect_url, $redirect_url);
             }
         }
-
-        // Perform the redirect
-        wp_safe_redirect($redirect_url);
-        exit;
+        return $redirect_url;
     }
 
-    /**
-     * Adjust the logout redirect function
-     */
-    public function logout_redirect() {
-        $custom_page_id = get_option('acemedia_login_block_custom_page', 0);
-        if (!$custom_page_id) {
-            // Custom login page not set, do nothing
-            return;
+    public function logout_redirect($redirect_url, $requested_redirect_url, $user) {
+        if (!$requested_redirect_url && get_option('acemedia_login_block_custom_page', 0)) {
+            return home_url();
         }
-
-        $redirect_url = home_url(); // Change this to your desired logout redirect URL
-        wp_safe_redirect($redirect_url);
-        exit();
+        return $redirect_url;
     }
 
     /**
      * Handle the logout process
      */
     public function handle_logout() {
-        if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+        if (($GLOBALS['pagenow'] ?? '') === 'wp-login.php' && isset($_GET['action']) && $_GET['action'] === 'logout') {
             // Verify the nonce
             if (isset($_GET['_wpnonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'log-out')) {
                 if (\AceLoginBlock\Auth\Two_Factor::has_trusted_cookie() && empty($_POST['acemedia_logout_choice'])) {
@@ -75,19 +59,18 @@ class Authentication {
                     \AceLoginBlock\Auth\Two_Factor::forget_trusted_device(get_current_user_id());
                 }
 
-                // Perform the logout
-                wp_logout();
-
-                // Redirect to the desired URL after logout
-                $redirect_url = home_url(); // Change this to your desired logout redirect URL
-                wp_safe_redirect($redirect_url);
-                exit();
+                // Core performs logout and applies its requested redirect/filter.
+                return;
             }
         }
     }
 
     private function render_logout_trust_prompt() {
-        $action_url = wp_login_url() . '?action=logout&_wpnonce=' . urlencode(sanitize_text_field(wp_unslash($_GET['_wpnonce'] ?? '')));
+        $args = ['action' => 'logout', '_wpnonce' => sanitize_text_field(wp_unslash($_GET['_wpnonce'] ?? ''))];
+        if (!empty($_GET['redirect_to']) && is_string($_GET['redirect_to'])) {
+            $args['redirect_to'] = wp_validate_redirect(esc_url_raw(wp_unslash($_GET['redirect_to'])), home_url());
+        }
+        $action_url = add_query_arg($args, wp_login_url());
 
         if (function_exists('login_header')) {
             login_header(__('Log out', 'acemedia-login-block'));

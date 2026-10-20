@@ -75,9 +75,9 @@ $has_registered_passkey = is_array($registered_passkeys) && !empty($registered_p
 
         <table class="form-table">
             <tr>
-                <th><label for="acemedia_2fa_method"><?php esc_html_e('Authentication Method', 'acemedia-login-block'); ?></label></th>
+                <th><label for="acemedia_modal_2fa_method"><?php esc_html_e('Authentication Method', 'acemedia-login-block'); ?></label></th>
                 <td>
-                    <select name="acemedia_2fa_method" id="acemedia_2fa_method">
+                    <select name="acemedia_2fa_method" id="acemedia_modal_2fa_method">
                         <option value="email" <?php disabled($role_requires_passkey_2fa, true); ?>><?php esc_html_e('Email Code', 'acemedia-login-block'); ?></option>
                         <option value="auth_app" <?php disabled($role_requires_passkey_2fa, true); ?>><?php esc_html_e('Authentication App', 'acemedia-login-block'); ?></option>
                         <option value="passkey"><?php esc_html_e('Passkey', 'acemedia-login-block'); ?></option>
@@ -97,10 +97,33 @@ $has_registered_passkey = is_array($registered_passkeys) && !empty($registered_p
                     </p>
                 </td>
             </tr>
-            <tr id="acemedia_2fa_qr_row" style="display: none;">
+            <tr id="acemedia_modal_2fa_qr_row" style="display: none;">
                 <th><label for="acemedia_2fa_qr"><?php esc_html_e('QR Code', 'acemedia-login-block'); ?></label></th>
                 <td>
-                    <img src="<?php echo esc_attr(Two_Factor::generate_qr_code(get_current_user_id())); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
+                    <button type="button" class="button acemedia-prepare-2fa"><?php esc_html_e('Prepare authentication app', 'acemedia-login-block'); ?></button>
+                    <img class="acemedia-enrolment-qr" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" hidden />
+                    <p><label><?php esc_html_e('Code from your authentication app', 'acemedia-login-block'); ?> <input name="acemedia_2fa_setup_code" id="acemedia_modal_2fa_setup_code" autocomplete="one-time-code" /></label></p>
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function () {
+                        document.querySelectorAll('#acemedia-2fa-setup-modal .acemedia-prepare-2fa').forEach(function (button) {
+                            button.addEventListener('click', async function () {
+                                const data = new FormData();
+                                data.append('action', 'acemedia_prepare_2fa');
+                                data.append('_ajax_nonce', <?php echo wp_json_encode(wp_create_nonce('acemedia_2fa_setup')); ?>);
+                                button.disabled = true;
+                                try {
+                                    const response = await fetch(ajaxurl, { method: 'POST', body: data, credentials: 'same-origin' });
+                                    const result = await response.json();
+                                    if (!result.success) { throw new Error(result.data.message); }
+                                    const image = button.parentElement.querySelector('.acemedia-enrolment-qr');
+                                    image.src = result.data.qr;
+                                    image.hidden = false;
+                                } catch (error) { alert(error.message); }
+                                finally { button.disabled = false; }
+                            });
+                        });
+                    });
+                    </script>
                     <p class="description"><?php esc_html_e('Scan this QR code with your authentication app to get started.', 'acemedia-login-block'); ?></p>
                 </td>
             </tr>
@@ -120,9 +143,10 @@ $has_registered_passkey = is_array($registered_passkeys) && !empty($registered_p
 
 <script>
 jQuery(document).ready(function($) {
-    const methodSelect = $('#acemedia_2fa_method');
-    const qrRow = $('#acemedia_2fa_qr_row');
-    const saveButton = $('.submit-wrapper .button-primary');
+    const modal = $('#acemedia-2fa-setup-modal');
+    const methodSelect = modal.find('#acemedia_modal_2fa_method');
+    const qrRow = $('#acemedia_modal_2fa_qr_row');
+    const saveButton = modal.find('.submit-wrapper .button-primary');
     const onboarding = $('#acemedia-passkey-setup-onboarding');
     const statusEl = $('#acemedia-2fa-setup-status');
     const roleRequiresPasskey = <?php echo $role_requires_passkey_2fa ? 'true' : 'false'; ?>;
@@ -164,11 +188,11 @@ jQuery(document).ready(function($) {
     $('#download-2fa-backup-codes').on('click', function() {
         $.post(ajaxurl, {
             action: 'get_or_generate_backup_codes',
-            _ajax_nonce: '<?php echo wp_create_nonce("get_or_generate_backup_codes"); ?>',
+            _ajax_nonce: '<?php echo esc_js(wp_create_nonce("get_or_generate_backup_codes")); ?>',
             force_new: false
         }, function(response) {
             if (response.success) {
-                const siteDomain = '<?php echo sanitize_file_name(parse_url(get_site_url(), PHP_URL_HOST)); ?>';
+                const siteDomain = '<?php echo esc_js(sanitize_file_name(wp_parse_url(get_site_url(), PHP_URL_HOST))); ?>';
                 const filename = siteDomain + '-2fa-backup-codes.txt';
                 const blob = new Blob([response.data.codes.join('\n')], { type: 'text/plain' });
                 const a = document.createElement('a');
@@ -185,7 +209,7 @@ jQuery(document).ready(function($) {
 
 function acemediaSave2FASetup() {
     const hasRegisteredPasskey = <?php echo $has_registered_passkey ? 'true' : 'false'; ?>;
-    const selectedMethod = document.getElementById('acemedia_2fa_method').value;
+    const selectedMethod = document.getElementById('acemedia_modal_2fa_method').value;
     if (selectedMethod === 'passkey' && !hasRegisteredPasskey) {
         alert('<?php echo esc_js(__('Please register at least one passkey in your profile before enabling passkey-based 2FA.', 'acemedia-login-block')); ?>');
         return;
@@ -193,9 +217,10 @@ function acemediaSave2FASetup() {
 
     const formData = new FormData();
     formData.append('action', 'acemedia_save_2fa_setup');
-    formData.append('_ajax_nonce', '<?php echo wp_create_nonce("acemedia_2fa_setup"); ?>');
+    formData.append('_ajax_nonce', '<?php echo esc_js(wp_create_nonce("acemedia_2fa_setup")); ?>');
     formData.append('acemedia_2fa_enabled', '1');
     formData.append('acemedia_2fa_method', selectedMethod);
+    formData.append('acemedia_2fa_setup_code', document.getElementById('acemedia_modal_2fa_setup_code').value);
 
     fetch(ajaxurl, {
         method: 'POST',

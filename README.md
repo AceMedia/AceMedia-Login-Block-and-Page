@@ -1,15 +1,31 @@
+<!-- ACE_SUITE_BRAND:START -->
+<p align="center">
+  <a href="https://acemedia.ninja/"><img src="docs/branding/ace-suite-header.svg" alt="Ace Media WordPress plugins, by Shane Rounce" width="960"></a>
+</p>
+
+<p align="center">
+  <a href="https://acemedia.ninja/">Ace Media</a> · <a href="https://acemedia.host/">WordPress hosting</a>
+</p>
+<!-- ACE_SUITE_BRAND:END -->
+
 # Ace Login Block
 
-**Contributors:** Shane Rounce of AceMedia.ninja  
-**Tags:** login, block, custom login, WordPress, Gutenberg, security  
-**Requires at least:** 6.6 
-**Tested up to:** 6.7  
-**Requires PHP:** 8.0  
-**Stable tag:** 0.427.0  
-**License:** GPLv2 or later  
-**License URI:** https://www.gnu.org/licenses/gpl-2.0.html  
+**Contributors:** Shane Rounce of AceMedia.ninja
+**Tags:** login, block, custom login, WordPress, Gutenberg, security
+**Requires at least:** 6.6
+**Tested up to:** 6.9
+**Requires PHP:** 8.2
+**Candidate version:** 0.429.0
+**License:** GPLv2 or later
+**License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
-Customize your WordPress login page with a fully-integrated Gutenberg block, giving you complete control over the design and functionality.
+Customise your WordPress login page with a fully-integrated Gutenberg block, giving you complete control over the design and functionality.
+
+## Candidate status
+
+Version 0.429.0 is a local security and compatibility candidate, not a published release. PHP 8.2+, OpenSSL and sodium are required. WordPress 6.9 browser checks cover native and custom-page login, virtual WebAuthn assertions, redirects and a public 0.426.0 upgrade. These tests do not certify every browser, authenticator or plugin combination; the full compatibility matrix and security review remain release gates.
+
+If dependencies become unavailable, the plugin blocks new authentication rather than silently dropping second-factor protection. Restore the supported runtime and complete package through hosting access. Public requests and existing sessions are not intentionally blocked.
 
 ## Description
 
@@ -19,10 +35,10 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 - Replace the default WordPress login page with a custom block-based design.
 - Full integration with the block editor, giving you complete control over the login page layout.
 - Allow the default WordPress login functionality for POST requests to ensure smooth login submissions.
-- Customize redirects and add additional fields or branding elements to the login page.
+- Customise redirects and add additional fields or branding elements to the login page.
 - Prevent further execution of the default `wp-login.php` after your custom login template loads.
 - Role-based redirects and per-role 2FA requirements.
-- Passkeys (security keys) for passwordless login and as a 2FA bypass.
+- Passkeys (security keys) for passwordless login and as a second factor.
 - Email and authenticator app 2FA, plus backup codes.
 - Remembered devices that skip 2FA only (password still required).
 - Login lockout after repeated failed attempts.
@@ -34,21 +50,21 @@ Ace Login Block provides a seamless way to craft unique, branded login experienc
 
 The source code for this plugin, including uncompressed JavaScript and CSS files, is available on GitHub. You can find it here:
 
-**GitHub Repository:** [Ace Login Block on GitHub](https://github.com/AceMedia/AceMedia-Login-Block-and-Page)
+**GitHub Repository:** [Ace Login Block on GitHub](https://github.com/AceMedia/WordPress-Login-Block-and-Page)
 
-We use npm and webpack to compile assets for production. To contribute, please fork the repository, make changes, and submit a pull request.
+We use npm and webpack to compile assets for production. Public issues and feature requests are welcome. Ace Media invites contributors to the upstream project; please discuss proposed changes before submitting a pull request. This contribution policy does not restrict your GPL rights to use, study, modify or redistribute the code.
 
 ## Installation
 
 This section describes how to install the plugin and get it working.
 
-1. Upload the plugin files to the `/wp-content/plugins/ace-login-block` directory, or install the plugin through the WordPress plugin screen directly.
+1. Upload the plugin files to the `/wp-content/plugins/acemedia-login-block` directory, or install the plugin through the WordPress plugin screen directly.
 2. Activate the plugin through the 'Plugins' screen in WordPress.
 3. Navigate to the "Ace Login Block" settings and select the page to use for your custom login page.
 
 ## Frequently Asked Questions
 
-### How do I customize my login page?
+### How do I customise my login page?
 
 Once the plugin is activated, go to the "Ace Login Block" settings in your WordPress dashboard and select the page you want to use as your custom login page. You can then use the block editor to design the page.
 
@@ -58,7 +74,7 @@ Yes, WordPress will continue to handle all login submissions via POST requests, 
 
 ### Can I add custom fields to my login page?
 
-Yes, you can add custom blocks, text, images, or any other elements within the block editor to fully customize the layout of your login page.
+Yes, you can add custom blocks, text, images, or any other elements within the block editor to fully customise the layout of your login page.
 
 ### What happens if I disable the plugin?
 
@@ -74,8 +90,11 @@ Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 
 ## Screenshots
 
-1. **Custom login page** built using Ace Login Block in the block editor.
-2. Example of branded login page after replacing the default WordPress login page.
+The Nightjar Reading Room is a fictional demonstration, using Twenty Twenty-Five and a small amount of demo theme CSS. No client material or real account data is shown.
+
+![A fictional reading-room login page on desktop](docs/screenshots/nightjar-desktop.png)
+
+[View the mobile example](docs/screenshots/nightjar-mobile.png). These images can be prepared as WordPress.org `assets/screenshot-1.png` and `assets/screenshot-2.png` when the release is approved; they are not bundled in the installable ZIP.
 
 ## Changelog
 
@@ -133,7 +152,7 @@ Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
   - Custom Login Page: Replace the default `wp-login.php` form with a page created in the block editor.
   - Post Request Handling: Securely handles login form submissions.
   - Seamless Template Loading: Automatically loads the selected custom page template.
-  - Block Editor Integration: Customize your login page using blocks.
+  - Block Editor Integration: Customise your login page using blocks.
   - Debugging: Debug messages included to assist with development.
 - **Important Note:** Known issues with form redirection in this version, recommended to use v0.421 for better performance.
 
@@ -147,21 +166,34 @@ Ace Login Block is perfect for developers and site owners looking to create uniq
 To set up a development environment for the plugin, ensure that you have [Node.js](https://nodejs.org) installed and then run the following commands:
 
 ```bash
-# Install dependencies
-npm install
+# Install production PHP dependencies from the committed lockfile
+composer install --no-dev --prefer-dist --no-interaction
+
+# Install build dependencies
+npm ci
 
 # Build the plugin for production
 npm run build
 
 # Watch for file changes in development
-npm run dev
+npm start
 
 # Run linter to check for code issues
-npm run lint
+npm run lint:js
 
 # Format code automatically
 npm run format
 
 # Create a zip file for deployment
-npm run zip
+npm run plugin-zip
 ```
+
+## Release packaging
+
+Run `npm run build` before `npm run plugin-zip`. Python 3 builds `dist/acemedia-login-block-0.429.0.zip` with the WordPress.org slug as its top-level directory, plus a SHA-256 manifest. Only the plugin entry point, `readme.txt`, `LICENSE`, `composer.json`, `includes`, `build` and the locked production `vendor` packages are staged. Source, build configuration, tests and dependency lockfiles remain on GitHub so builds can be inspected and reproduced.
+
+Never publish a candidate until the release matrix and security review are complete. The manifest checks package composition, not secrets or runtime compatibility. Full source and Git-history secret scanning is a separate release gate.
+
+Part of the Ace plugin suite, maintained by [Ace Media](https://acemedia.ninja/). Explore [Ace Media Host](https://acemedia.host/) for hosting information.
+
+See [candidate validation evidence](docs/release-validation.md) for executed checks and remaining release gates.

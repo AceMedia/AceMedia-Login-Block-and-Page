@@ -3,17 +3,17 @@
  * Plugin Name:       Ace Login Block
  * Description:       A block to replace the WordPress login page using a custom page and its template from the site editor.
  * Requires at least: 6.6
- * Tested up to:      7.0
- * Requires PHP:      8.0
- * Version:           0.428.0
+ * Tested up to:      7.1
+ * Requires PHP:      8.2
+ * Version:           0.429.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       acemedia-login-block
- * GitHub URI:        https://github.com/AceMedia/AceMedia-Login-Block-and-Page
+ * GitHub URI:        https://github.com/AceMedia/WordPress-Login-Block-and-Page
  * @package           AceLoginBlock
  *
- * The uncompressed source code, including JavaScript and CSS files, can be found at the GitHub repository: https://github.com/AceMedia/AceMedia-Login-Block-and-Page.
+ * The uncompressed source code, including JavaScript and CSS files, can be found at the GitHub repository: https://github.com/AceMedia/WordPress-Login-Block-and-Page.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -23,12 +23,47 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 
 
-require 'vendor/autoload.php';
+/**
+ * Keep public requests available after a runtime downgrade or incomplete upload.
+ * Never silently remove the second-factor policy when dependencies cannot load.
+ * Restore the supported runtime/package using hosting access to recover login.
+ */
+function acemedia_login_block_runtime_error() {
+    return new WP_Error('acemedia_auth_unavailable', __('Login is temporarily unavailable because Ace Login Block requires PHP 8.2 or later, OpenSSL, sodium and its installed dependencies. Please contact the site administrator.', 'acemedia-login-block'));
+}
+
+function acemedia_login_block_runtime_notice() {
+    if (current_user_can('activate_plugins')) {
+        echo '<div class="notice notice-error"><p>' . esc_html(acemedia_login_block_runtime_error()->get_error_message()) . '</p></div>';
+    }
+}
+
+$acemedia_runtime_ready = PHP_VERSION_ID >= 80200
+    && extension_loaded('openssl')
+    && function_exists('sodium_crypto_secretbox')
+    && function_exists('sodium_crypto_secretbox_open')
+    && is_readable(__DIR__ . '/vendor/autoload.php');
+if ($acemedia_runtime_ready) {
+    try {
+        require_once __DIR__ . '/vendor/autoload.php';
+        $acemedia_runtime_ready = class_exists('OTPHP\\TOTP')
+            && class_exists('lbuchs\\WebAuthn\\WebAuthn')
+            && class_exists('Endroid\\QrCode\\QrCode');
+    } catch (Throwable $error) {
+        $acemedia_runtime_ready = false;
+    }
+}
+if (!$acemedia_runtime_ready) {
+    add_filter('authenticate', 'acemedia_login_block_runtime_error', PHP_INT_MAX);
+    add_action('admin_notices', 'acemedia_login_block_runtime_notice');
+    add_action('network_admin_notices', 'acemedia_login_block_runtime_notice');
+    return;
+}
 
 
 
 // Define plugin constants
-define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.427.0');
+define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.429.0');
 define('ACEMEDIA_LOGIN_BLOCK_PATH', plugin_dir_path(__FILE__));
 define('ACEMEDIA_LOGIN_BLOCK_URL', plugin_dir_url(__FILE__));
 
@@ -343,7 +378,7 @@ add_action('admin_init', 'acemedia_register_2fa_method_setting');
  */
 function acemedia_login_block_encrypt($data) {
     if (!function_exists('sodium_crypto_secretbox')) {
-        return $data;
+        return false;
     }
     $key    = sodium_crypto_generichash(wp_salt('auth'), '', SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
     $nonce  = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);

@@ -58,18 +58,24 @@ class Logging {
 
 		$user = get_user_by('id', (int) $user_id);
 		$subject = sprintf(
+			/* translators: %s: security event name. */
 			__('Security alert: %s', 'acemedia-login-block'),
 			$entry['event']
 		);
 
 		$lines = [
+			/* translators: %s: account login or user ID. */
 			sprintf(__('User: %s', 'acemedia-login-block'), $user ? $user->user_login : $user_id),
+			/* translators: %s: event timestamp. */
 			sprintf(__('Time: %s', 'acemedia-login-block'), $entry['time']),
+			/* translators: %s: request IP address. */
 			sprintf(__('IP: %s', 'acemedia-login-block'), $entry['ip'] ?: '-'),
+			/* translators: %s: browser user agent. */
 			sprintf(__('User Agent: %s', 'acemedia-login-block'), $entry['user_agent'] ?: '-'),
 		];
 
 		if (!empty($entry['data'])) {
+			/* translators: %s: JSON event details. */
 			$lines[] = sprintf(__('Details: %s', 'acemedia-login-block'), wp_json_encode($entry['data']));
 		}
 

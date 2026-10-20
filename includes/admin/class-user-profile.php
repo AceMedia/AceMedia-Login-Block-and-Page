@@ -29,6 +29,9 @@ class User_Profile {
      * Add 2FA fields to user profile
      */
     public function add_2fa_fields($user) {
+        if ((int) $user->ID !== get_current_user_id()) {
+            return;
+        }
         $role_requires_2fa = $this->role_requires_2fa($user);
         $role_requires_passkey_2fa = $this->role_requires_passkey_2fa($user);
         $has_registered_passkey = $this->user_has_registered_passkey($user->ID);
@@ -40,6 +43,7 @@ class User_Profile {
             $selected_method = 'passkey';
         }
         ?>
+        <input type="hidden" name="acemedia_2fa_settings_present" value="1" />
         <h3><?php esc_html_e('Two-Factor Authentication', 'acemedia-login-block'); ?></h3>
         <?php if ($role_requires_2fa): ?>
             <p class="description"><?php esc_html_e('Your role requires 2FA. Please enable and complete setup below.', 'acemedia-login-block'); ?></p>
@@ -47,7 +51,7 @@ class User_Profile {
         <?php if ($role_requires_passkey_2fa): ?>
             <p class="description"><?php esc_html_e('Your role requires passkey verification for the second factor. Register at least one passkey in the “Passkeys / Security Keys” section below.', 'acemedia-login-block'); ?></p>
         <?php endif; ?>
-        <table class="form-table">
+        <table class="form-table" id="acemedia-profile-2fa">
             <tr>
                 <th><label for="acemedia_2fa_enabled"><?php esc_html_e('Enable 2FA', 'acemedia-login-block'); ?></label></th>
                 <td>
@@ -78,7 +82,30 @@ class User_Profile {
             <tr id="acemedia_2fa_qr_row" style="display: <?php echo ($is_2fa_enabled && $selected_method === 'auth_app' && !$role_requires_passkey_2fa) ? 'table-row' : 'none'; ?>">
                 <th><label for="acemedia_2fa_qr"><?php esc_html_e('2FA QR Code', 'acemedia-login-block'); ?></label></th>
                 <td>
-                    <img src="<?php echo esc_attr(Two_Factor::generate_qr_code($user->ID)); ?>" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" />
+                    <button type="button" class="button acemedia-prepare-2fa"><?php esc_html_e('Prepare authentication app', 'acemedia-login-block'); ?></button>
+                    <img class="acemedia-enrolment-qr" alt="<?php esc_attr_e('2FA QR Code', 'acemedia-login-block'); ?>" hidden />
+                    <p><label><?php esc_html_e('Code from your authentication app', 'acemedia-login-block'); ?> <input name="acemedia_2fa_setup_code" id="acemedia_2fa_setup_code" autocomplete="one-time-code" /></label></p>
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function () {
+                        document.querySelectorAll('#acemedia-profile-2fa .acemedia-prepare-2fa').forEach(function (button) {
+                            button.addEventListener('click', async function () {
+                                const data = new FormData();
+                                data.append('action', 'acemedia_prepare_2fa');
+                                data.append('_ajax_nonce', <?php echo wp_json_encode(wp_create_nonce('acemedia_2fa_setup')); ?>);
+                                button.disabled = true;
+                                try {
+                                    const response = await fetch(ajaxurl, { method: 'POST', body: data, credentials: 'same-origin' });
+                                    const result = await response.json();
+                                    if (!result.success) { throw new Error(result.data.message); }
+                                    const image = button.parentElement.querySelector('.acemedia-enrolment-qr');
+                                    image.src = result.data.qr;
+                                    image.hidden = false;
+                                } catch (error) { alert(error.message); }
+                                finally { button.disabled = false; }
+                            });
+                        });
+                    });
+                    </script>
                     <p class="description"><?php esc_html_e('Scan this QR code with your authentication app.', 'acemedia-login-block'); ?></p>
                 </td>
             </tr>
@@ -99,9 +126,10 @@ class User_Profile {
                     </div>
                     <script>
                     jQuery(document).ready(function($) {
-                        const methodSelect = $('#acemedia_2fa_method');
-                        const qrRow = $('#acemedia_2fa_qr_row');
-                        const enableCheckbox = $('#acemedia_2fa_enabled');
+                        const profile = $('#acemedia-profile-2fa');
+                        const methodSelect = profile.find('#acemedia_2fa_method');
+                        const qrRow = profile.find('#acemedia_2fa_qr_row');
+                        const enableCheckbox = profile.find('#acemedia_2fa_enabled');
                         const onboardingMessage = $('#acemedia-passkey-onboarding-message');
 
                         const isPasskeyRequiredByRole = methodSelect.data('passkey-required') === 1 || methodSelect.data('passkey-required') === '1';
@@ -133,7 +161,7 @@ class User_Profile {
                             }
                             $.post(ajaxurl, {
                                 action: 'get_or_generate_backup_codes',
-                                _ajax_nonce: '<?php echo wp_create_nonce("get_or_generate_backup_codes"); ?>',
+                                _ajax_nonce: '<?php echo esc_js(wp_create_nonce("get_or_generate_backup_codes")); ?>',
                                 force_new: true // Force new codes when explicitly requested
                             }, function(response) {
                                 if (response.success) {
@@ -145,7 +173,7 @@ class User_Profile {
 
                         $('#download-backup-codes').on('click', function() {
                             const codes = $('#backup-codes').text();
-                            const siteDomain = '<?php echo sanitize_file_name(parse_url(get_site_url(), PHP_URL_HOST)); ?>';
+                            const siteDomain = '<?php echo esc_js(sanitize_file_name(wp_parse_url(get_site_url(), PHP_URL_HOST))); ?>';
                             const filename = siteDomain + '-2fa-backup-codes.txt';
 
                             const blob = new Blob([codes], { type: 'text/plain' });
@@ -168,7 +196,11 @@ class User_Profile {
     /**
      * Save 2FA settings
      */
+    // Core profile update actions run after check_admin_referer('update-user_' . $user_id).
     public function save_2fa_fields($user_id) {
+        if (!isset($_POST['acemedia_2fa_settings_present']) || (int) $user_id !== get_current_user_id()) {
+            return false;
+        }
         if (!current_user_can('edit_user', $user_id)) {
             return false;
         }
@@ -178,10 +210,16 @@ class User_Profile {
             return false;
         }
 
+        $errors = new \WP_Error();
+        $this->validate_2fa_fields($errors, true, $user);
+        if ($errors->has_errors()) {
+            return false;
+        }
+
         $role_requires_passkey_2fa = $this->role_requires_passkey_2fa($user);
 
         $is_2fa_enabled = isset($_POST['acemedia_2fa_enabled']) ? 1 : 0;
-        if ($role_requires_passkey_2fa) {
+        if ($this->role_requires_2fa($user)) {
             $is_2fa_enabled = 1;
         }
 
@@ -194,7 +232,7 @@ class User_Profile {
             delete_user_meta($user_id, '_acemedia_2fa_trusted_devices');
         }
 
-        $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field($_POST['acemedia_2fa_method']) : 'email';
+        $selected_method = isset($_POST['acemedia_2fa_method']) ? sanitize_text_field(wp_unslash($_POST['acemedia_2fa_method'])) : 'email';
         $allowed_methods = ['email', 'auth_app', 'passkey'];
         if (!in_array($selected_method, $allowed_methods, true)) {
             $selected_method = 'email';
@@ -207,10 +245,21 @@ class User_Profile {
         }
 
         update_user_meta($user_id, '_acemedia_2fa_method', $selected_method);
+        if ($is_2fa_enabled) {
+            update_user_meta($user_id, '_acemedia_2fa_setup_complete', true);
+        }
     }
 
     public function validate_2fa_fields($errors, $update, $user) {
-        if (!($errors instanceof \WP_Error) || !($user instanceof \WP_User)) {
+        if (!isset($_POST['acemedia_2fa_settings_present']) || (int) $user->ID !== get_current_user_id()) {
+            return;
+        }
+        if (!($errors instanceof \WP_Error) || !is_object($user) || empty($user->ID)) {
+            return;
+        }
+        // Core passes the editable stdClass here; load roles from the stored account.
+        $user = get_userdata((int) $user->ID);
+        if (!($user instanceof \WP_User)) {
             return;
         }
 
@@ -223,6 +272,20 @@ class User_Profile {
         $allowed_methods = ['email', 'auth_app', 'passkey'];
         if (!in_array($requested_method, $allowed_methods, true)) {
             $requested_method = 'email';
+        }
+
+        if ($this->role_requires_2fa($user) && !$requested_enabled) {
+            $errors->add('acemedia_role_requires_2fa', __('Your role requires two-factor authentication.', 'acemedia-login-block'));
+        }
+        if ($requested_enabled && $requested_method === 'auth_app' && (
+            !get_user_meta($user->ID, '_acemedia_2fa_setup_complete', true)
+            || get_user_meta($user->ID, '_acemedia_2fa_method', true) !== 'auth_app'
+        )) {
+            $secret = \acemedia_login_block_decrypt(get_user_meta($user->ID, '_acemedia_2fa_secret', true));
+            $code = isset($_POST['acemedia_2fa_setup_code']) ? sanitize_text_field(wp_unslash($_POST['acemedia_2fa_setup_code'])) : '';
+            if (!$secret || !Two_Factor::get_instance()->verify_qr_code($secret, $code)) {
+                $errors->add('acemedia_setup_code_required', __('Prepare your authentication app and enter a valid code before saving.', 'acemedia-login-block'));
+            }
         }
 
         $role_requires_passkey_2fa = $this->role_requires_passkey_2fa($user);

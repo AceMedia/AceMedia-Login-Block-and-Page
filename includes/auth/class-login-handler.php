@@ -18,43 +18,28 @@ class Login_Handler {
      * Replace wp-login.php with the selected custom page content and template.
      */
     public function load_custom_page_template() {
-        $custom_page_id = get_option('acemedia_login_block_custom_page');
-
-        // Check if we're on wp-login.php and a custom page is set
-        if (isset($_SERVER['REQUEST_URI'])) {
-            $request_uri = sanitize_text_field(wp_unslash($_SERVER['REQUEST_URI']));
-            if (strpos($request_uri, 'wp-login.php') !== false && $custom_page_id) {
-                // If the request method is POST, let WordPress handle the login process
-                if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-                    return; // Let WordPress handle the login submission
-                }
-
-                // Fetch the template for the chosen page
-                $page_template = get_page_template_slug($custom_page_id);
-
-                // If no custom template is found, use the default page template
-                if (!empty($page_template) && locate_template($page_template)) {
-                    $template_path = locate_template($page_template);
-                } else {
-                    $template_path = get_page_template();
-                }
-
-                if (!empty($template_path)) {
-                    // Set up the global post data for the custom page
-                    global $wp_query, $post;
-                    $post = get_post($custom_page_id);
-                    setup_postdata($post);
-
-                    // Load the custom page template
-                    include $template_path;
-
-                    // Prevent further execution after the template is loaded
-                    exit;
-                } else {
-                    wp_die(esc_html__('Template not found for the login page.', 'acemedia-login-block'));
-                }
-            }
+        // Core owns reset, recovery, logout, reauthentication and interim screens.
+        $action = isset($_REQUEST['action']) ? sanitize_key(wp_unslash($_REQUEST['action'])) : 'login';
+        // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- Fixed-value comparison only; method is never stored or output.
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET' || $action !== 'login'
+            || !empty($_REQUEST['interim-login']) || !empty($_REQUEST['reauth'])) {
+            return;
         }
+        $custom_page_id = (int) get_option('acemedia_login_block_custom_page', 0);
+        $page = $custom_page_id ? get_post($custom_page_id) : null;
+        if (!$page || $page->post_type !== 'page' || $page->post_status !== 'publish') {
+            return;
+        }
+        // Let the normal front-end query select both classic and block templates.
+        $url = get_permalink($custom_page_id);
+        if (!$url) {
+            return;
+        }
+        if (!empty($_GET['redirect_to']) && is_string($_GET['redirect_to'])) {
+            $url = add_query_arg('redirect_to', wp_validate_redirect(esc_url_raw(wp_unslash($_GET['redirect_to'])), admin_url()), $url);
+        }
+        wp_safe_redirect($url);
+        exit;
     }
 
     /**
@@ -62,6 +47,7 @@ class Login_Handler {
      */
     public function enqueue_login_script() {
         if (has_block('acemedia/login-block')) {
+            $custom_page_id = (int) get_option('acemedia_login_block_custom_page', 0);
             wp_enqueue_script(
                 'acemedia-login-frontend',
                 plugin_dir_url(__FILE__) . '../../build/acemedia-login.js',

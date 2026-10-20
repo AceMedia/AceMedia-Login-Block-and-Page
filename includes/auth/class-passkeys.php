@@ -10,6 +10,12 @@ if (!defined('ABSPATH')) {
 }
 
 class Passkeys {
+    private static $verified_passwordless_user = 0;
+
+    public static function is_verified_passwordless_user($user_id) {
+        return self::$verified_passwordless_user === (int) $user_id && $user_id > 0;
+    }
+
     private const META_KEY = '_acemedia_passkeys';
     private const TRANSIENT_REGISTER = 'acemedia_passkey_register_';
     private const TRANSIENT_LOGIN = 'acemedia_passkey_login_';
@@ -18,6 +24,7 @@ class Passkeys {
 
     public function __construct() {
         add_action('rest_api_init', [$this, 'register_routes']);
+        add_action('acemedia_passkey_claim_cleanup', [__CLASS__, 'cleanup_expired_claims']);
         add_action('login_form', [$this, 'render_login_ui'], 20);
         add_action('show_user_profile', [$this, 'render_profile_ui'], 20);
         add_action('edit_user_profile', [$this, 'render_profile_ui'], 20);
@@ -402,6 +409,12 @@ class Passkeys {
                                         form.appendChild(tokenInput);
                                     }
 
+                                    // A verified passkey replaces the password; native HTML validation
+                                    // must allow the second-factor handler to receive this submission.
+                                    const passwordInput = form.querySelector('input[name="pwd"]');
+                                    if (passwordInput && tokenInput.value) {
+                                        passwordInput.required = false;
+                                    }
                                     const submitButton = form.querySelector('#wp-submit');
                                     if (submitButton) {
                                         submitButton.click();
@@ -434,7 +447,13 @@ class Passkeys {
                                     form.appendChild(tokenInput);
                                 }
 
-                                const submitButton = form.querySelector('#wp-submit');
+                                // A verified passkey replaces the password; native HTML validation
+                                    // must allow the second-factor handler to receive this submission.
+                                    const passwordInput = form.querySelector('input[name="pwd"]');
+                                    if (passwordInput && tokenInput.value) {
+                                        passwordInput.required = false;
+                                    }
+                                    const submitButton = form.querySelector('#wp-submit');
                                 if (submitButton) {
                                     submitButton.click();
                                 } else if (form.requestSubmit) {
@@ -465,7 +484,13 @@ class Passkeys {
                                     form.appendChild(tokenInput);
                                 }
 
-                                const submitButton = form.querySelector('#wp-submit');
+                                // A verified passkey replaces the password; native HTML validation
+                                    // must allow the second-factor handler to receive this submission.
+                                    const passwordInput = form.querySelector('input[name="pwd"]');
+                                    if (passwordInput && tokenInput.value) {
+                                        passwordInput.required = false;
+                                    }
+                                    const submitButton = form.querySelector('#wp-submit');
                                 if (submitButton) {
                                     submitButton.click();
                                 } else if (form.requestSubmit) {
@@ -540,11 +565,13 @@ class Passkeys {
                                         $last_used = isset($passkey['last_used']) ? (int) $passkey['last_used'] : 0;
                                         ?>
                                         <?php if ($created) : ?>
-                                            <?php printf(esc_html__('Created: %s', 'acemedia-login-block'), esc_html(wp_date(get_option('date_format'), $created))); ?>
+                                            <?php /* translators: %s: passkey registration date. */
+                                            printf(esc_html__('Created: %s', 'acemedia-login-block'), esc_html(wp_date(get_option('date_format'), $created))); ?>
                                         <?php endif; ?>
                                         <?php if ($last_used) : ?>
                                             <?php echo ' | '; ?>
-                                            <?php printf(esc_html__('Last used: %s', 'acemedia-login-block'), esc_html(wp_date(get_option('date_format'), $last_used))); ?>
+                                            <?php /* translators: %s: passkey last-use date. */
+                                            printf(esc_html__('Last used: %s', 'acemedia-login-block'), esc_html(wp_date(get_option('date_format'), $last_used))); ?>
                                         <?php endif; ?>
                                     </span>
                                     <br />
@@ -889,6 +916,9 @@ class Passkeys {
         $username = sanitize_text_field($request->get_param('username'));
         $context = sanitize_text_field($request->get_param('context')) ?: 'passwordless';
         $discoverable = (bool) $request->get_param('discoverable');
+        if (!in_array($context, ['passwordless', 'password_factor', 'second_factor'], true)) {
+            return new \WP_Error('invalid_context', __('Invalid passkey login context.', 'acemedia-login-block'), ['status' => 400]);
+        }
 
         $user = null;
         $allow_list = [];
@@ -926,7 +956,7 @@ class Passkeys {
 
         $webauthn = $this->get_webauthn();
         $allow_credentials = empty($allow_list) ? null : $allow_list;
-        $getArgs = $webauthn->getGetArgs($allow_credentials, 60, true, true, true, true, true, 'preferred');
+        $getArgs = $webauthn->getGetArgs($allow_credentials, 60, true, true, true, true, true, $context === 'second_factor' ? 'preferred' : 'required');
 
         $state = $this->generate_state();
         $this->store_state(self::TRANSIENT_LOGIN, $state, [
@@ -948,7 +978,7 @@ class Passkeys {
         }
 
         $state = sanitize_text_field($request->get_param('state'));
-        $state_data = $this->get_state(self::TRANSIENT_LOGIN, $state);
+        $state_data = self::take_once(self::TRANSIENT_LOGIN, $state);
         if (!$state_data) {
             return new \WP_Error('invalid_state', __('Login session expired.', 'acemedia-login-block'), ['status' => 400]);
         }
@@ -1006,7 +1036,7 @@ class Passkeys {
                 $passkey['publicKey'],
                 $challenge,
                 isset($passkey['counter']) ? (int) $passkey['counter'] : 0,
-                false,
+                ($state_data['context'] ?? '') !== 'second_factor',
                 true
             );
         } catch (\Exception $e) {
@@ -1049,9 +1079,29 @@ class Passkeys {
             return new \WP_Error('passkey_requires_password', __('This account requires password login before passkey verification.', 'acemedia-login-block'), ['status' => 403]);
         }
 
-        wp_set_current_user($user_id);
-        wp_set_auth_cookie($user_id);
-        do_action('wp_login', $user->user_login, $user);
+        // Only an asserted, UV-verified passkey reaches this internal bridge.
+        // Keep the normal authenticate chain (including multisite spam checks),
+        // session creation and wp_login observers available to integrations.
+        $provide_verified_user = static function ($candidate) use ($user) {
+            return is_wp_error($candidate) ? $candidate : apply_filters('wp_authenticate_user', $user, '');
+        };
+        add_filter('authenticate', $provide_verified_user, 15, 1);
+        self::$verified_passwordless_user = (int) $user_id;
+        try {
+            $signed_in = wp_signon(['user_login' => $user->user_login, 'user_password' => '', 'remember' => false], is_ssl());
+        } finally {
+            self::$verified_passwordless_user = 0;
+            remove_filter('authenticate', $provide_verified_user, 15);
+        }
+        if (is_wp_error($signed_in)) {
+            $code = $signed_in->get_error_code();
+            $data = $signed_in->get_error_data($code);
+            if (!is_array($data) || !isset($data['status'])) {
+                $signed_in->add_data(array_merge(is_array($data) ? $data : [], ['status' => 403]), $code);
+            }
+            return $signed_in;
+        }
+        wp_set_current_user($signed_in->ID);
 
         return rest_ensure_response([
             'success' => true,
@@ -1103,7 +1153,7 @@ class Passkeys {
             return false;
         }
 
-        $data = get_transient(self::TRANSIENT_2FA . $token);
+        $data = self::take_once(self::TRANSIENT_2FA, $token);
         if (!$data || (int) ($data['user_id'] ?? 0) !== (int) $user_id) {
             return false;
         }
@@ -1112,7 +1162,24 @@ class Passkeys {
         return true;
     }
 
+    /** Read-only first-factor inspection for the factor-selection request. */
+    public static function inspect_password_token($token, $username) {
+        $data = get_transient(self::TRANSIENT_PASSWORD_FACTOR . sanitize_text_field($token));
+        $user = !empty($data['user_id']) ? get_user_by('id', (int) $data['user_id']) : false;
+        if (!$user || (string) $username === '') {
+            return false;
+        }
+        if (!hash_equals((string) $user->user_login, (string) $username)
+            && !hash_equals((string) $user->user_email, (string) $username)) {
+            return false;
+        }
+        return $user;
+    }
+
     public function authenticate_with_passkey_token($user, $username, $password) {
+        if (is_wp_error($user)) {
+            return $user;
+        }
         $token = isset($_POST['acemedia_passkey_password_token'])
             ? sanitize_text_field(wp_unslash($_POST['acemedia_passkey_password_token']))
             : '';
@@ -1121,7 +1188,7 @@ class Passkeys {
             return $user;
         }
 
-        $token_data = get_transient(self::TRANSIENT_PASSWORD_FACTOR . $token);
+        $token_data = self::take_once(self::TRANSIENT_PASSWORD_FACTOR, $token);
         if (!$token_data || empty($token_data['user_id'])) {
             return new \WP_Error('passkey_password_token_invalid', __('Passkey login session expired. Please try again.', 'acemedia-login-block'));
         }
@@ -1142,7 +1209,7 @@ class Passkeys {
         }
 
         delete_transient(self::TRANSIENT_PASSWORD_FACTOR . $token);
-        return $target_user;
+        return apply_filters('wp_authenticate_user', $target_user, $password);
     }
 
     private function is_enabled() {
@@ -1254,6 +1321,9 @@ class Passkeys {
     }
 
     private function user_requires_2fa($user) {
+        if (get_user_meta($user->ID, '_acemedia_2fa_enabled', true)) {
+            return true;
+        }
         foreach ($user->roles as $role) {
             if (
                 get_option("acemedia_2fa_enabled_{$role}", false)
@@ -1287,7 +1357,7 @@ class Passkeys {
                 break;
             }
         }
-        return $redirect_url;
+        return wp_validate_redirect(apply_filters('login_redirect', $redirect_url, '', $user), admin_url());
     }
 
     private function get_user_from_login($login) {
@@ -1301,6 +1371,68 @@ class Passkeys {
 
     private function generate_state($length = 16) {
         return bin2hex(random_bytes($length));
+    }
+
+    /** Claim a transient once across workers, including persistent object caches. */
+    private static function take_once($prefix, $token) {
+        if (!is_string($token) || $token === '') {
+            return false;
+        }
+        $key = 'acemedia_passkey_claim_' . hash('sha256', $prefix . $token);
+        $previous = get_option($key, false);
+        // All issued states live at most ten minutes. Never reclaim a lock while
+        // its original state can still be valid, even if a worker was suspended.
+        if (is_string($previous) && (int) $previous < time() - 11 * MINUTE_IN_SECONDS) {
+            self::release_claim($key, $previous);
+        }
+        $owner = time() . ':' . bin2hex(random_bytes(16));
+        global $wpdb;
+        // add_option() can upsert on a concurrent cache miss. A plain unique-key
+        // INSERT IGNORE is required for exclusive ownership across workers.
+        $claimed = $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'off')",
+            $key, $owner
+        ));
+        wp_cache_delete($key, 'options');
+        if ($claimed !== 1) {
+            return false;
+        }
+        if (!wp_next_scheduled('acemedia_passkey_claim_cleanup')) {
+            wp_schedule_single_event(time() + HOUR_IN_SECONDS, 'acemedia_passkey_claim_cleanup');
+        }
+        try {
+            $data = get_transient($prefix . $token);
+            delete_transient($prefix . $token);
+            return $data;
+        } finally {
+            self::release_claim($key, $owner);
+        }
+    }
+
+    private static function release_claim($key, $owner) {
+        global $wpdb;
+        // Conditional deletion prevents an old worker releasing another claim.
+        $wpdb->delete($wpdb->options, ['option_name' => $key, 'option_value' => $owner], ['%s', '%s']);
+        wp_cache_delete($key, 'options');
+    }
+
+    public static function cleanup_expired_claims() {
+        global $wpdb;
+        $like = $wpdb->esc_like('acemedia_passkey_claim_') . '%';
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $like
+        ));
+        $pending = false;
+        foreach ($rows as $row) {
+            if ((int) $row->option_value < time() - 11 * MINUTE_IN_SECONDS) {
+                self::release_claim($row->option_name, $row->option_value);
+            } else {
+                $pending = true;
+            }
+        }
+        if ($pending && !wp_next_scheduled('acemedia_passkey_claim_cleanup')) {
+            wp_schedule_single_event(time() + HOUR_IN_SECONDS, 'acemedia_passkey_claim_cleanup');
+        }
     }
 
     private function store_state($prefix, $state, array $data, $ttl) {

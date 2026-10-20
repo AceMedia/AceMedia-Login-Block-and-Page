@@ -1,6 +1,6 @@
 {
     "require": {
-        "php": ">=8.0",
+        "php": ">=8.2",
         "endroid/qr-code": "^6.0",
         "spomky-labs/otphp": "^11.3",
         "lbuchs/webauthn": "^2.1.0"

@@ -34,10 +34,29 @@ class Two_Factor {
      */
     public function __construct() {
         add_filter('authenticate', [$this, 'validate_2fa'], 99, 3);
+        add_action('wp_ajax_acemedia_prepare_2fa', [$this, 'prepare_enrolment']);
         add_action('wp_ajax_acemedia_save_2fa_setup', [$this, 'handle_setup']);
         add_action('rest_api_init', [$this, 'register_rest_routes']);
         add_action('admin_init', [$this, 'enforce_2fa_setup'], 1);
         add_action('login_form', [$this, 'acemedia_add_2fa_to_login_form'], 10, 1);
+        add_action('woocommerce_login_form', [$this, 'woocommerce_login_fields']);
+    }
+
+    /** Shared by WooCommerce My Account and its classic checkout login form. */
+    public function woocommerce_login_fields() {
+        $redirect = function_exists('wc_get_page_permalink') ? wc_get_page_permalink('myaccount') : home_url('/');
+        if (function_exists('is_checkout') && is_checkout() && function_exists('wc_get_checkout_url')) {
+            $redirect = wc_get_checkout_url();
+        }
+        ?>
+        <p class="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+            <label><?php esc_html_e('Two-factor code (if enabled)', 'acemedia-login-block'); ?>
+                <input type="text" class="woocommerce-Input input-text" name="2fa_code" autocomplete="one-time-code" value="" />
+            </label>
+            <small><?php esc_html_e('Use an authentication app or backup code. For email verification, sign in with your password first to receive a code, then enter it here and sign in again.', 'acemedia-login-block'); ?></small>
+        </p>
+        <p><a href="<?php echo esc_url(wp_login_url($redirect)); ?>"><?php esc_html_e('Use the secure login page for passkey verification', 'acemedia-login-block'); ?></a></p>
+        <?php
     }
 
     /**
@@ -98,6 +117,10 @@ class Two_Factor {
         $needs_2fa = $this->user_requires_2fa($user);
         $requires_passkey_2fa = $this->user_requires_passkey_2fa($user);
 
+        if (Passkeys::is_verified_passwordless_user($user->ID)) {
+            return $user;
+        }
+
         if (!$needs_2fa) {
             return $user;
         }
@@ -127,6 +150,9 @@ class Two_Factor {
 
         $two_factor_code = isset($_POST['2fa_code']) ? sanitize_text_field(wp_unslash($_POST['2fa_code'])) : '';
         if (empty($two_factor_code)) {
+            if ($this->sanitize_2fa_method(get_user_meta($user->ID, '_acemedia_2fa_method', true)) === 'email') {
+                $this->send_2fa_email($user->ID);
+            }
             add_action('login_form', function() {
                 echo '<p><label for="2fa_code">' . 
                      esc_html__('Two-Factor Authentication Code', 'acemedia-login-block') . 
@@ -135,12 +161,8 @@ class Two_Factor {
             return new \WP_Error('2fa_required', __('Two-factor authentication code required.', 'acemedia-login-block'));
         }
 
-        // Verify the code
-        $request = new \WP_REST_Request('POST', '/acemedia/v1/verify-2fa');
-        $request->set_param('code', $two_factor_code);
-        $request->set_param('username', $username);
-
-        $verification_result = $this->verify_code($request);
+        // Consume only once, after the password authentication chain succeeded.
+        $verification_result = $this->verify_user_code($user, $two_factor_code);
 
         if (is_wp_error($verification_result) || !$verification_result['success']) {
             return new \WP_Error('2fa_invalid', __('Invalid two-factor authentication code.', 'acemedia-login-block'));
@@ -155,22 +177,52 @@ class Two_Factor {
      * Verify 2FA code
      */
     public function verify_code($request) {
-        $code = sanitize_text_field((string) $request->get_param('code'));
-        $username = $request->get_param('username');
+        // Kept for old clients, but public verification must never consume factors.
+        return new \WP_Error('2fa_invalid', __('Complete verification using the login form.', 'acemedia-login-block'), ['status' => 400]);
+    }
 
-        if (!$username) {
-            return new \WP_Error('missing_username', __('Username is required.', 'acemedia-login-block'));
+    private function with_factor_lock($user_id, $callback) {
+        global $wpdb;
+        // The base options table is shared across blogs, like user metadata.
+        $lock = 'acemedia_2fa_lock_' . (int) $user_id;
+        $owner = time() . ':' . bin2hex(random_bytes(16));
+        $table = $wpdb->base_prefix . 'options';
+        $acquired = $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO %i (option_name, option_value, autoload) VALUES (%s, %s, 'no')",
+            $table, $lock, $owner
+        ));
+        if (!$acquired) {
+            $held = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM %i WHERE option_name = %s", $table, $lock));
+            if (is_string($held) && (int) $held < time() - 60) {
+                $wpdb->query($wpdb->prepare("DELETE FROM %i WHERE option_name = %s AND option_value = %s", $table, $lock, $held));
+            }
+            return new \WP_Error('2fa_busy', __('Verification is busy. Please try again.', 'acemedia-login-block'));
         }
-
-        $user = get_user_by('login', sanitize_text_field($username));
-        if (!$user) {
-            // Generic error — do not reveal whether the username exists.
-            return new \WP_Error('2fa_invalid', __('Invalid verification code.', 'acemedia-login-block'), ['status' => 400]);
+        try {
+            return $callback();
+        } finally {
+            $wpdb->query($wpdb->prepare("DELETE FROM %i WHERE option_name = %s AND option_value = %s", $table, $lock, $owner));
         }
+    }
 
+    private function verify_user_code($user, $code) {
+        return $this->with_factor_lock($user->ID, function () use ($user, $code) {
+            $result = $this->verify_user_code_locked($user, $code);
+            if (!is_wp_error($result) && !empty($result['success'])) {
+                delete_user_meta($user->ID, '_acemedia_2fa_attempts');
+            }
+            return $result;
+        });
+    }
+
+    private function verify_user_code_locked($user, $code) {
         // Rate limiting
         if (!$this->check_rate_limit($user->ID)) {
             return new \WP_Error('too_many_attempts', __('Too many attempts. Please try again later.', 'acemedia-login-block'));
+        }
+
+        if ($this->user_requires_passkey_2fa($user)) {
+            return new \WP_Error('passkey_2fa_required', __('This account requires passkey verification for 2FA.', 'acemedia-login-block'));
         }
 
         // Verify backup codes first
@@ -179,10 +231,6 @@ class Two_Factor {
         }
 
         // Verify method-specific code
-        if ($this->user_requires_passkey_2fa($user)) {
-            return new \WP_Error('passkey_2fa_required', __('This account requires passkey verification for 2FA.', 'acemedia-login-block'));
-        }
-
         $method = $this->sanitize_2fa_method(get_user_meta($user->ID, '_acemedia_2fa_method', true));
         if ($method === 'auth_app') {
             return $this->verify_auth_app_code($user->ID, $code);
@@ -193,7 +241,6 @@ class Two_Factor {
         }
 
         return $this->verify_email_code($user->ID, $code);
-
     }
 
     /**
@@ -233,7 +280,7 @@ class Two_Factor {
         }
 
         $is_2fa_enabled = isset($_POST['acemedia_2fa_enabled']) ? 1 : 0;
-        $selected_method = isset($_POST['acemedia_2fa_method']) ? $this->sanitize_2fa_method(sanitize_text_field($_POST['acemedia_2fa_method'])) : 'email';
+        $selected_method = isset($_POST['acemedia_2fa_method']) ? $this->sanitize_2fa_method(sanitize_text_field(wp_unslash($_POST['acemedia_2fa_method']))) : 'email';
 
         $user = get_userdata($user_id);
         $requires_passkey_2fa = $user ? $this->user_requires_passkey_2fa($user) : false;
@@ -244,6 +291,19 @@ class Two_Factor {
 
         if ($selected_method === 'passkey' && !$this->user_has_registered_passkey($user_id)) {
             wp_send_json_error(['message' => __('Please register at least one passkey before selecting passkey as your 2FA method.', 'acemedia-login-block')]);
+            return;
+        }
+
+        if ($is_2fa_enabled && $selected_method === 'auth_app') {
+            $secret = \acemedia_login_block_decrypt(get_user_meta($user_id, '_acemedia_2fa_secret', true));
+            $code = isset($_POST['acemedia_2fa_setup_code']) ? sanitize_text_field(wp_unslash($_POST['acemedia_2fa_setup_code'])) : '';
+            if (!$secret || !$this->verify_qr_code($secret, $code)) {
+                wp_send_json_error(['message' => __('Enter a valid code from your authentication app before saving.', 'acemedia-login-block')]);
+                return;
+            }
+        }
+        if ($user && $this->user_requires_2fa($user) && !$is_2fa_enabled) {
+            wp_send_json_error(['message' => __('Use your profile to change your two-factor preference.', 'acemedia-login-block')]);
             return;
         }
 
@@ -274,21 +334,36 @@ class Two_Factor {
      * Check 2FA status via REST API
      */
     public function check_2fa_status($request) {
-        $username = $request->get_param('username');
-        $user = get_user_by('login', sanitize_text_field($username));
-
-        if (!$user) {
-            // Do not reveal whether the username exists (prevents user enumeration).
-            return [
-                'is2FAEnabled' => false,
-                'requires2FA' => false,
-                'requiresPasskey2FA' => false,
-                'hasRegisteredPasskey' => false,
-                'passkeyPasswordlessAllowed' => false,
-                'method' => 'email',
-                'needs2FASetup' => false,
-                'trustedDevice' => false,
-            ];
+        $username = sanitize_text_field((string) $request->get_param('username'));
+        $password = (string) $request->get_param('password');
+        $password_token = sanitize_text_field((string) $request->get_param('passwordToken'));
+        $passkey_authenticator = null;
+        if ($password_token !== '') {
+            $passkey_user = Passkeys::inspect_password_token($password_token, $username);
+            if (!($passkey_user instanceof \WP_User)) {
+                return new \WP_Error('authentication_failed', __('Unable to sign in with those details.', 'acemedia-login-block'), ['status' => 403]);
+            }
+            $passkey_authenticator = static function ($candidate) use ($passkey_user, $password) {
+                if (is_wp_error($candidate)) {
+                    return $candidate;
+                }
+                return apply_filters('wp_authenticate_user', $passkey_user, $password);
+            };
+            add_filter('authenticate', $passkey_authenticator, 15, 1);
+        }
+        // Run the complete password-authentication chain except this second-factor step.
+        // No factor status, email delivery or second-factor counters before it succeeds.
+        remove_filter('authenticate', [$this, 'validate_2fa'], 99);
+        try {
+            $user = wp_authenticate($username, $password);
+        } finally {
+            add_filter('authenticate', [$this, 'validate_2fa'], 99, 3);
+            if ($passkey_authenticator !== null) {
+                remove_filter('authenticate', $passkey_authenticator, 15);
+            }
+        }
+        if (!($user instanceof \WP_User)) {
+            return new \WP_Error('authentication_failed', __('Unable to sign in with those details.', 'acemedia-login-block'), ['status' => 403]);
         }
 
         $needs_2fa = $this->user_requires_2fa($user);
@@ -314,8 +389,12 @@ class Two_Factor {
             $trusted_device = $this->is_trusted_device($user->ID);
         }
 
+        if ($needs_2fa && !$trusted_device && $selected_method === 'email') {
+            $this->send_2fa_email($user->ID);
+        }
+
         return [
-            'is2FAEnabled' => $is_2fa_enabled && $needs_2fa && !$trusted_device,
+            'is2FAEnabled' => $needs_2fa && !$trusted_device,
             'requires2FA' => $needs_2fa,
             'requiresPasskey2FA' => $requires_passkey_2fa,
             'hasRegisteredPasskey' => $has_registered_passkey,
@@ -327,6 +406,9 @@ class Two_Factor {
     }
 
     private function user_requires_2fa($user) {
+        if (get_user_meta($user->ID, '_acemedia_2fa_enabled', true)) {
+            return true;
+        }
         foreach ($user->roles as $role) {
             if (
                 get_option("acemedia_2fa_enabled_{$role}", false)
@@ -388,8 +470,7 @@ class Two_Factor {
             $totp = \OTPHP\TOTP::create($secret);
             // Accept the current code plus one window either side (±30s clock skew).
             return $totp->verify($code, null, 1);
-        } catch (Exception $e) {
-            error_log('TOTP verification error: ' . $e->getMessage());
+        } catch (\Throwable $e) {
             return false;
         }
     }
@@ -398,8 +479,8 @@ class Two_Factor {
     public function acemedia_log_2fa_attempt($user_id, $data = []) {
         $log = array_merge([
             'time' => current_time('mysql'),
-            'ip' => $_SERVER['REMOTE_ADDR'],
-            'user_agent' => $_SERVER['HTTP_USER_AGENT']
+            'ip' => sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'] ?? '')),
+            'user_agent' => sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'] ?? ''))
         ], $data);
     
         $logs = get_user_meta($user_id, '_acemedia_2fa_logs', true) ?: [];
@@ -411,20 +492,63 @@ class Two_Factor {
      * Send 2FA email
      */
     public function send_2fa_email($user_id) {
+        return $this->with_factor_lock($user_id, function () use ($user_id) {
+            return $this->send_2fa_email_locked($user_id);
+        });
+    }
+
+    private function send_2fa_email_locked($user_id) {
         $user = get_userdata($user_id);
 
         if ($user && is_email($user->user_email)) {
+            if ((int) get_user_meta($user_id, '_acemedia_2fa_code_time', true) > time() - MINUTE_IN_SECONDS) {
+                return;
+            }
             $code = wp_generate_password(6, false, false);
             update_user_meta($user_id, '_acemedia_2fa_code', $code);
             update_user_meta($user_id, '_acemedia_2fa_code_time', time());
 
             $subject = __('Your 2FA Code', 'acemedia-login-block');
+            /* translators: %s: One-time verification code. */
             $message = sprintf(__('Your 2FA code is: %s (valid for 5 minutes)', 'acemedia-login-block'), $code);
             $headers = ['Content-Type: text/html; charset=UTF-8'];
 
             if (!wp_mail($user->user_email, $subject, $message, $headers)) {
-                error_log('Failed to send 2FA email to ' . $user->user_email);
+                delete_user_meta($user_id, '_acemedia_2fa_code');
+                delete_user_meta($user_id, '_acemedia_2fa_code_time');
             }
+        }
+    }
+
+    public function prepare_enrolment() {
+        check_ajax_referer('acemedia_2fa_setup');
+        $user_id = get_current_user_id();
+        if (!$user_id) {
+            wp_send_json_error(['message' => __('Please sign in.', 'acemedia-login-block')], 403);
+            return;
+        }
+        $stored = get_user_meta($user_id, '_acemedia_2fa_secret', true);
+        if ($stored && !\acemedia_login_block_decrypt($stored)) {
+            wp_send_json_error(['message' => __('Your existing enrolment cannot be read. Contact your administrator for recovery.', 'acemedia-login-block')]);
+            return;
+        }
+        if (!$stored) {
+            $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+            $secret = '';
+            for ($i = 0; $i < 32; $i++) {
+                $secret .= $alphabet[random_int(0, 31)];
+            }
+            $encrypted = \acemedia_login_block_encrypt($secret);
+            if (!$encrypted) {
+                wp_send_json_error(['message' => __('Secure storage is unavailable.', 'acemedia-login-block')]);
+                return;
+            }
+            add_user_meta($user_id, '_acemedia_2fa_secret', $encrypted, true);
+        }
+        try {
+            wp_send_json_success(['qr' => self::generate_qr_code($user_id)]);
+        } catch (\Throwable $e) {
+            wp_send_json_error(['message' => __('QR rendering is unavailable. Please contact your administrator.', 'acemedia-login-block')]);
         }
     }
 
@@ -433,16 +557,11 @@ class Two_Factor {
      */
     public static function generate_qr_code($user_id) {
 
-        $secret = \acemedia_login_block_decrypt(get_user_meta($user_id, '_acemedia_2fa_secret', true));
+        $stored = get_user_meta($user_id, '_acemedia_2fa_secret', true);
+        $secret = $stored ? \acemedia_login_block_decrypt($stored) : false;
+        // Display is read-only. Missing/unreadable enrolments require explicit setup.
         if (!$secret) {
-            $base32_alphabet = str_split('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567');
-            $secret = '';
-
-            for ($i = 0; $i < 32; $i++) {
-                $secret .= $base32_alphabet[array_rand($base32_alphabet)];
-            }
-
-            update_user_meta($user_id, '_acemedia_2fa_secret', \acemedia_login_block_encrypt($secret));
+            return '';
         }
 
         $site_name = html_entity_decode(get_bloginfo('name'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -480,8 +599,8 @@ class Two_Factor {
     public function log_2fa_attempt($user_id, $data = []) {
     $log = array_merge([
         'time' => current_time('mysql'),
-        'ip' => $_SERVER['REMOTE_ADDR'],
-        'user_agent' => $_SERVER['HTTP_USER_AGENT']
+        'ip' => sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'] ?? '')),
+        'user_agent' => sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'] ?? ''))
     ], $data);
 
     $logs = get_user_meta($user_id, '_acemedia_2fa_logs', true) ?: [];
@@ -568,8 +687,11 @@ public function acemedia_add_2fa_to_login_form() {
                         passkeyToken: createHiddenInput('acemedia_passkey_token', '')
                     };
 
-                    Object.values(formInputs).forEach(input => {
-                        if (!form.querySelector(`input[name="${input.name}"]`)) {
+                    Object.entries(formInputs).forEach(([key, input]) => {
+                        const existing = form.querySelector(`input[name="${input.name}"]`);
+                        if (existing) {
+                            formInputs[key] = existing;
+                        } else {
                             form.appendChild(input);
                         }
                     });
@@ -598,18 +720,21 @@ public function acemedia_add_2fa_to_login_form() {
                         credentials: 'same-origin',
                         body: JSON.stringify({
                             username,
+                    password: form.querySelector('input[name="pwd"]')?.value || '',
+                    passwordToken: form.querySelector('input[name="acemedia_passkey_password_token"]')?.value || '',
                             timestamp: sessionStart,
                             csrf_token: aceLoginBlock.csrfToken
                         }),
                     })
-                    .then(response => {
+                    .then(async response => {
+                        const data = await response.json();
                         if (!response.ok) {
-                            throw new Error('Network response was not ok');
+                            throw new Error(extractApiMessage(data, 'Unable to sign in with those details. Please try again.'));
                         }
-                        return response.json();
+                        return data;
                     })
                     .then(data => {
-                        if (data.needs2FASetup) {
+                        if (data.needs2FASetup && !data.requires2FA) {
                             formInputs.twoFactorState.value = 'setup';
                             formInputs.twoFactorVerified.value = 'true';
                             form.submit();
@@ -625,7 +750,7 @@ public function acemedia_add_2fa_to_login_form() {
                     })
                     .catch(error => {
                         console.error('Error checking 2FA status:', error);
-                        showMessage(form, 'Could not verify your 2FA status. Please try again.');
+                        showMessage(form, error.message || 'Unable to sign in. Please try again.');
                         formInputs.twoFactorState.value = 'error';
                     });
                 }
@@ -749,35 +874,10 @@ public function acemedia_add_2fa_to_login_form() {
 
                         showMessage(form, '');
 
-                        fetch(aceLoginBlock.verify2FAEndpoint, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            credentials: 'same-origin',
-                            body: JSON.stringify({ code: twoFACode, username }),
-                        })
-                        .then(async (response) => {
-                            const data = await response.json();
-                            if (!response.ok) {
-                                throw new Error(extractApiMessage(data, 'Authentication failed. Please try again.'));
-                            }
-                            return data;
-                        })
-                        .then((data) => {
-                            if (data.success) {
-                                formInputs.twoFactorVerified.value = 'true';
-                                form.dataset.twoFactorVerified = 'true';
-                                isSubmitting = true;
-                                form.submit();
-                            } else {
-                                showMessage(form, extractApiMessage(data, 'Invalid authentication code. Please try again.'));
-                            }
-                        })
-                        .catch((error) => {
-                            console.error('2FA verification failed:', error);
-                            showMessage(form, error.message || 'An error occurred while verifying the authentication code.');
-                        });
+                        // The final password login consumes the code exactly once server-side.
+                formInputs.twoFactorVerified.value = 'true';
+                form.dataset.twoFactorVerified = 'true';
+                form.submit();
                     };
 
                     const loginButton = form.querySelector('#wp-submit');
@@ -1035,17 +1135,19 @@ public function acemedia_add_2fa_to_login_form() {
      * Check rate limit for 2FA attempts
      */
     private function check_rate_limit($user_id) {
-        $max = (int) apply_filters('acemedia_2fa_max_attempts_per_hour', 5);
-        $attempts = get_transient('2fa_attempts_' . $user_id);
-        if ($attempts === false) {
-            set_transient('2fa_attempts_' . $user_id, 1, HOUR_IN_SECONDS);
-            return true;
-        } else if ($attempts >= $max) {
-            return false;
-        } else {
-            set_transient('2fa_attempts_' . $user_id, $attempts + 1, HOUR_IN_SECONDS);
-            return true;
+        $max = max(1, (int) apply_filters('acemedia_2fa_max_attempts_per_hour', 5));
+        // Account-wide metadata prevents rotating between multisite blogs to reset the budget.
+        // This runs under the shared account lock in verify_user_code().
+        $attempts = get_user_meta($user_id, '_acemedia_2fa_attempts', true);
+        if (!is_array($attempts) || ($attempts['expires'] ?? 0) <= time()) {
+            $attempts = ['count' => 0, 'expires' => time() + HOUR_IN_SECONDS];
         }
+        if ($attempts['count'] >= $max) {
+            return false;
+        }
+        $attempts['count']++;
+        return (bool) update_user_meta($user_id, '_acemedia_2fa_attempts', $attempts);
+
     }
 
     /**
@@ -1056,9 +1158,9 @@ public function acemedia_add_2fa_to_login_form() {
         if (is_array($backup_codes)) {
             foreach ($backup_codes as $index => $code_data) {
                 if (wp_check_password($code, $code_data['hash'])) {
+                    $previous = $backup_codes;
                     unset($backup_codes[$index]);
-                    update_user_meta($user_id, '_acemedia_2fa_backup_codes', $backup_codes);
-                    return true;
+                    return (bool) update_user_meta($user_id, '_acemedia_2fa_backup_codes', $backup_codes, $previous);
                 }
             }
         }
@@ -1071,7 +1173,21 @@ public function acemedia_add_2fa_to_login_form() {
     private function verify_auth_app_code($user_id, $code) {
         $secret = \acemedia_login_block_decrypt(get_user_meta($user_id, '_acemedia_2fa_secret', true));
         if ($secret && $this->verify_qr_code($secret, $code)) {
-            // Success: no log needed here.
+            $fingerprint = hash('sha256', (string) $code);
+            $recent = get_user_meta($user_id, '_acemedia_2fa_recent_totp', true);
+            $recent = is_array($recent) ? array_filter($recent, static function ($expiry) { return $expiry >= time(); }) : [];
+            // Honour the previous version's single-code replay marker during upgrades.
+            $last = get_user_meta($user_id, '_acemedia_2fa_last_totp', true);
+            if (is_array($last) && ($last['expires'] ?? 0) >= time() && isset($last['hash'])) {
+                $recent[$last['hash']] = $last['expires'];
+            }
+            if (isset($recent[$fingerprint])) {
+                return ['success' => false];
+            }
+            $recent[$fingerprint] = time() + 90;
+            if (!update_user_meta($user_id, '_acemedia_2fa_recent_totp', $recent)) {
+                return ['success' => false];
+            }
             return ['success' => true];
         }
 
@@ -1093,7 +1209,9 @@ public function acemedia_add_2fa_to_login_form() {
         if ($expected_code && $code_time && (time() - $code_time) <= $ttl
             && hash_equals((string) $expected_code, (string) $code)) {
             // Single-use: invalidate the code once accepted.
-            delete_user_meta($user_id, '_acemedia_2fa_code');
+            if (!delete_user_meta($user_id, '_acemedia_2fa_code', $expected_code)) {
+                return ['success' => false];
+            }
             delete_user_meta($user_id, '_acemedia_2fa_code_time');
             return ['success' => true];
         }

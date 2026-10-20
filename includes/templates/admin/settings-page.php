@@ -258,7 +258,10 @@ $front_end_pages = get_pages();
 
     <div style="margin-top: 20px;">
         <p>
-            <?php printf(esc_html__('Total log size: %s', 'acemedia-login-block'), size_format($total_log_size)); ?>
+            <?php
+            /* translators: %s: formatted size of stored security logs. */
+            printf(esc_html__('Total log size: %s', 'acemedia-login-block'), esc_html(size_format($total_log_size)));
+            ?>
         </p>
         <form method="post" action="">
             <?php wp_nonce_field('clear_2fa_logs', 'clear_2fa_logs_nonce'); ?>

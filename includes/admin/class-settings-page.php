@@ -39,6 +39,7 @@ class Settings_Page {
             $role_redirect_key = "acemedia_login_block_redirect_{$role}";
             register_setting('acemedia_login_block_options_group', $role_redirect_key, [
                 'type' => 'string',
+                /* translators: %s: WordPress role name. */
                 'description' => sprintf(__('Redirect URL for %s role', 'acemedia-login-block'), $details['name']),
                 'default' => '',
             ]);
@@ -47,6 +48,7 @@ class Settings_Page {
             $role_2fa_key = "acemedia_2fa_enabled_{$role}";
             register_setting('acemedia_login_block_options_group', $role_2fa_key, [
                 'type' => 'boolean',
+                /* translators: %s: WordPress role name. */
                 'description' => sprintf(__('Enable 2FA for %s role', 'acemedia-login-block'), $details['name']),
                 'default' => false,
             ]);
@@ -54,6 +56,7 @@ class Settings_Page {
             $role_passkey_passwordless_key = "acemedia_passkey_passwordless_{$role}";
             register_setting('acemedia_login_block_options_group', $role_passkey_passwordless_key, [
                 'type' => 'boolean',
+                /* translators: %s: WordPress role name. */
                 'description' => sprintf(__('Allow passkey passwordless login for %s role', 'acemedia-login-block'), $details['name']),
                 'default' => false,
             ]);
@@ -61,6 +64,7 @@ class Settings_Page {
             $role_passkey_2fa_required_key = "acemedia_passkey_2fa_required_{$role}";
             register_setting('acemedia_login_block_options_group', $role_passkey_2fa_required_key, [
                 'type' => 'boolean',
+                /* translators: %s: WordPress role name. */
                 'description' => sprintf(__('Require passkey as 2FA method for %s role', 'acemedia-login-block'), $details['name']),
                 'default' => false,
             ]);
@@ -186,8 +190,7 @@ class Settings_Page {
         echo '<option value="">' . esc_html__('Default WordPress Login', 'acemedia-login-block') . '</option>';
 
         foreach ($pages as $page) {
-            $selected = selected($custom_page_id, $page->ID, false);
-            echo '<option value="' . esc_attr($page->ID) . '" ' . $selected . '>' . esc_html($page->post_title) . '</option>';
+            echo '<option value="' . esc_attr($page->ID) . '" ' . selected($custom_page_id, $page->ID, false) . '>' . esc_html($page->post_title) . '</option>';
         }
 
         echo '</select>';

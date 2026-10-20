@@ -39,3 +39,6 @@ qrcodes/*
 
 # But include the qrcodes/ directory itself
 !qrcodes/
+
+# Generated candidate packages and manifests
+/dist/

@@ -53,7 +53,7 @@ class Admin_Notices {
         if (
             isset($_POST['clear_2fa_logs']) &&
             isset($_POST['clear_2fa_logs_nonce']) &&
-            wp_verify_nonce($_POST['clear_2fa_logs_nonce'], 'clear_2fa_logs') &&
+            wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['clear_2fa_logs_nonce'])), 'clear_2fa_logs') &&
             current_user_can('manage_options')
         ) {
             $users = get_users();
