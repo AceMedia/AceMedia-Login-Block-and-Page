@@ -1,14 +1,14 @@
 === Ace Login Block ===
 Contributors: shanerounce
-Tags: login, block, custom login, WordPress, Gutenberg
+Tags: login, passkeys, two-factor, security, custom login
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.430.0
+Stable tag: 0.431.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Customise your WordPress login page with a fully-integrated Gutenberg block, giving you complete control over the design and functionality.
+Design your login page in the block editor, with passkeys, two-factor authentication and lockout protection built in.
 
 == Description ==
 
@@ -29,7 +29,8 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 * Passkeys (security keys) for passwordless login and as a second factor.
 * Email and authenticator app 2FA, plus backup codes.
 * Remembered devices that skip 2FA only (password still required).
-* Login lockout after repeated failed attempts.
+* Login lockout after repeated failed attempts. By default, 5 failures within 15 minutes locks the account for 30 minutes. Repeated failures from one IP address, or against a username that does not exist, are limited too.
+* A Security tab with a log of failed and blocked logins, filters, one-click unlocking and an optional email when a lockout happens.
 * Passkey policy settings: RP ID override, attestation preference, and per-role passwordless control.
 
 *Security:*
@@ -73,16 +74,39 @@ If you disable Ace Login Block, WordPress will revert to the default `wp-login.p
 
 No. Remembered devices only skip the 2FA step. Password entry is still required.
 
+= What happens after too many failed logins? =
+
+By default, 5 failed attempts within 15 minutes locks that account for 30 minutes, and 20 failures from one IP address locks that address. The person sees how long is left, worded the same way for every lock so it does not reveal whether a username exists. All of these numbers can be changed in the settings, and an administrator can unlock an account or address early from the Security tab.
+
+= My site is behind Cloudflare. Will everyone share one IP address? =
+
+Not if you set Trusted Proxy Header to auto. The visitor's real address is then read from Cloudflare's header, but only when the request genuinely comes from a Cloudflare address, so the header cannot be faked from anywhere else. Private and local addresses are never IP locked.
+
 = Do passkeys require HTTPS? =
 
 Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 
 == Screenshots ==
 
-1. Fictional Nightjar Reading Room login page on desktop, using Twenty Twenty-Five with demo theme styling.
-2. The same fictional reading-room login page on mobile.
+1. A login page built with the Login block, shown on a fictional reading-room site using Twenty Twenty-Five.
+2. The Login block in the block editor, with full and minimal templates.
+3. The second step for an account with two-factor authentication, with the option to remember the device.
+4. After too many failed attempts, the person is told how long the lock lasts.
+5. The Security tab: locked accounts, IP addresses and the login attempt log, with one-click unlocking.
+6. Settings for the login page, passkeys, lockout limits, alerts and per-role two-factor rules.
+7. Passkeys and two-factor options on a user's profile.
 
 == Changelog ==
+
+= 0.431.0 =
+Release Date: 2026-10-22
+* New Security tab: a log of failed and blocked logins with filters and paging, plus one-click unlocking for accounts, IP addresses and unknown usernames.
+* Failed logins are now also counted per IP address (IPv6 by /64 network) and per unknown username, so guessing across many accounts is slowed down too. Set the IP limit to 0 to turn IP locking off.
+* A correct password from an address the account has signed in from before is not held back by someone else's failures on that account.
+* Optional email when a lockout happens, a daily clean-up of old log entries, and a warning when one address is behind most of the failures.
+* Trusted Proxy Header setting for sites behind Cloudflare.
+* The block login page now tells people when they are locked out and for how long, instead of showing a generic error.
+* Uninstalling the plugin now removes the login log, counters and lockout data.
 
 = 0.430.0 =
 Release Date: 2026-10-20

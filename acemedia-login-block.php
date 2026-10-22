@@ -5,7 +5,7 @@
  * Requires at least: 6.6
  * Tested up to:      7.1
  * Requires PHP:      8.2
- * Version:           0.430.0
+ * Version:           0.431.0
  * Author:            Shane Rounce
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -90,7 +90,7 @@ if (!$acemedia_runtime_ready) {
 
 
 // Define plugin constants
-define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.430.0');
+define('ACEMEDIA_LOGIN_BLOCK_VERSION', '0.431.0');
 define('ACEMEDIA_LOGIN_BLOCK_PATH', plugin_dir_path(__FILE__));
 define('ACEMEDIA_LOGIN_BLOCK_URL', plugin_dir_url(__FILE__));
 

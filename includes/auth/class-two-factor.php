@@ -383,6 +383,10 @@ class Two_Factor {
                 remove_filter('authenticate', $passkey_authenticator, 15);
             }
         }
+        // The lockout message reads the same for every lock type, so passing it on reveals no usernames.
+        if (is_wp_error($user) && in_array(Login_Lockout::ERROR_CODE, $user->get_error_codes(), true)) {
+            return new \WP_Error(Login_Lockout::ERROR_CODE, $user->get_error_message(Login_Lockout::ERROR_CODE), ['status' => 429]);
+        }
         if (!($user instanceof \WP_User)) {
             return new \WP_Error('authentication_failed', __('Unable to sign in with those details.', 'acemedia-login-block'), ['status' => 403]);
         }

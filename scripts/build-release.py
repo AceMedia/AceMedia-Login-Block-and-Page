@@ -9,7 +9,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 SLUG = 'acemedia-login-block'
 VERSION = json.loads((ROOT / 'package.json').read_text())['version']
-FILES = ('acemedia-login-block.php', 'readme.txt', 'LICENSE', 'composer.json')
+FILES = ('acemedia-login-block.php', 'uninstall.php', 'readme.txt', 'LICENSE', 'composer.json')
 TREES = ('build', 'includes', 'vendor')
 DENY = {'AGENTS.md', 'CLAUDE.md', 'SKILL.md', '.env', '__pycache__', 'node_modules', 'tests', 'test', '_test'}
 lock = json.loads((ROOT / 'composer.lock').read_text())
