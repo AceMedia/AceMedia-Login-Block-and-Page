@@ -99,6 +99,7 @@ require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/class-loader.php';
 
 // Admin includes
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/admin/class-settings-page.php';
+require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/admin/class-security-page.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/admin/class-admin-notices.php';
 require_once ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/admin/class-user-profile.php';
 
@@ -480,3 +481,8 @@ function acemedia_enqueue_admin_login_script() {
     }
 }
 add_action('login_enqueue_scripts', 'acemedia_enqueue_admin_login_script');
+
+// Stop the login log cleanup cron when the plugin is deactivated.
+register_deactivation_hook(__FILE__, function () {
+    wp_clear_scheduled_hook(\AceLoginBlock\Auth\Login_Lockout::CRON_HOOK);
+});

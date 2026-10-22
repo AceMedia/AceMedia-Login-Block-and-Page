@@ -98,6 +98,36 @@ class Settings_Page {
             'default' => 30,
         ]);
 
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_ip_max_attempts', [
+            'type' => 'integer',
+            'description' => __('Failed login attempts from one IP address before it is locked', 'acemedia-login-block'),
+            'sanitize_callback' => 'absint',
+            'default' => 20,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_trusted_proxy_header', [
+            'type' => 'string',
+            'description' => __('Trusted proxy header for the client IP', 'acemedia-login-block'),
+            'sanitize_callback' => function ($value) {
+                return $value === 'auto' ? 'auto' : 'off';
+            },
+            'default' => 'off',
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_lockout_notify', [
+            'type' => 'boolean',
+            'description' => __('Email the site admin when a lockout happens', 'acemedia-login-block'),
+            'sanitize_callback' => 'rest_sanitize_boolean',
+            'default' => true,
+        ]);
+
+        register_setting('acemedia_login_block_options_group', 'acemedia_login_log_retention_days', [
+            'type' => 'integer',
+            'description' => __('Days to keep the login attempt log', 'acemedia-login-block'),
+            'sanitize_callback' => 'absint',
+            'default' => 30,
+        ]);
+
         register_setting('acemedia_login_block_options_group', 'acemedia_security_alerts_enabled', [
             'type' => 'boolean',
             'description' => __('Enable security alert emails', 'acemedia-login-block'),
@@ -223,7 +253,39 @@ private function acemedia_render_site_logo_setting() {
      * Render the settings page
      */
     public function render_settings_page() {
-        include ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/templates/admin/settings-page.php';
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $tab = isset($_GET['tab']) ? sanitize_key(wp_unslash($_GET['tab'])) : 'settings';
+        $tabs = [
+            'settings' => __('Settings', 'acemedia-login-block'),
+            'security' => __('Security', 'acemedia-login-block'),
+        ];
+        if (!isset($tabs[$tab])) {
+            $tab = 'settings';
+        }
+
+        echo '<div class="wrap">';
+        echo '<h1>' . esc_html__('Ace Login Block Settings', 'acemedia-login-block') . '</h1>';
+        echo '<nav class="nav-tab-wrapper">';
+        foreach ($tabs as $slug => $label) {
+            printf(
+                '<a href="%1$s" class="nav-tab%2$s">%3$s</a>',
+                esc_url(add_query_arg(['page' => 'acemedia-login-block', 'tab' => $slug], admin_url('options-general.php'))),
+                $slug === $tab ? ' nav-tab-active' : '',
+                esc_html($label)
+            );
+        }
+        echo '</nav>';
+
+        if ($tab === 'security') {
+            Security_Page::instance()->render();
+        } else {
+            include ACEMEDIA_LOGIN_BLOCK_PATH . 'includes/templates/admin/settings-page.php';
+        }
+        echo '</div>';
     }
 }
 

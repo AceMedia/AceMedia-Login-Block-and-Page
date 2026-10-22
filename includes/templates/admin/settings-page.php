@@ -10,8 +10,7 @@ global $acemedia_admin_pages;
 $front_end_pages = get_pages();
 ?>
 
-<div class="wrap">
-    <h1><?php esc_html_e('Ace Login Block Settings', 'acemedia-login-block'); ?></h1>
+<div>
     <form method="post" action="options.php">
         <?php
         settings_fields('acemedia_login_block_options_group');
@@ -116,6 +115,45 @@ $front_end_pages = get_pages();
                 <td>
                     <input type="number" min="1" name="acemedia_login_lockout_duration_minutes" value="<?php echo esc_attr(get_option('acemedia_login_lockout_duration_minutes', 30)); ?>" />
                     <p class="description"><?php esc_html_e('How long the account stays locked.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Max Failed Attempts per IP', 'acemedia-login-block'); ?></th>
+                <td>
+                    <input type="number" min="1" name="acemedia_login_lockout_ip_max_attempts" value="<?php echo esc_attr(get_option('acemedia_login_lockout_ip_max_attempts', 20)); ?>" />
+                    <p class="description"><?php esc_html_e('Failed attempts from one IP address, across any usernames (including ones that do not exist), before that address is locked. Uses the same window and duration as above. Set to 0 to turn IP locking off. Private and loopback addresses are never locked.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><label for="acemedia_login_trusted_proxy_header"><?php esc_html_e('Trusted Proxy Header', 'acemedia-login-block'); ?></label></th>
+                <td>
+                    <?php $proxy_header = get_option('acemedia_login_trusted_proxy_header', 'off'); ?>
+                    <select id="acemedia_login_trusted_proxy_header" name="acemedia_login_trusted_proxy_header">
+                        <option value="off" <?php selected($proxy_header, 'off'); ?>><?php esc_html_e('Off (use the connecting address)', 'acemedia-login-block'); ?></option>
+                        <option value="auto" <?php selected($proxy_header, 'auto'); ?>><?php esc_html_e('Auto (trust CF-Connecting-IP or X-Forwarded-For from Cloudflare addresses)', 'acemedia-login-block'); ?></option>
+                    </select>
+                    <p class="description"><?php esc_html_e('Leave off if the web server already restores the visitor address (for example nginx real_ip). The header is only trusted when the request comes from a Cloudflare address, so it cannot be spoofed by visitors.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Lockout Emails', 'acemedia-login-block'); ?></th>
+                <td>
+                    <label>
+                        <input type="checkbox" name="acemedia_login_lockout_notify" value="1" <?php checked(get_option('acemedia_login_lockout_notify', true), true); ?> />
+                        <?php esc_html_e('Email the site admin when an account, username or IP address is locked out', 'acemedia-login-block'); ?>
+                    </label>
+                    <p class="description"><?php esc_html_e('At most one email every five minutes. Sent to the alert recipient below, or the site admin email.', 'acemedia-login-block'); ?></p>
+                </td>
+            </tr>
+
+            <tr valign="top">
+                <th scope="row"><?php esc_html_e('Login Log Retention (days)', 'acemedia-login-block'); ?></th>
+                <td>
+                    <input type="number" min="1" name="acemedia_login_log_retention_days" value="<?php echo esc_attr(get_option('acemedia_login_log_retention_days', 30)); ?>" />
+                    <p class="description"><?php esc_html_e('Login attempts on the Security tab older than this are removed each day.', 'acemedia-login-block'); ?></p>
                 </td>
             </tr>
 
