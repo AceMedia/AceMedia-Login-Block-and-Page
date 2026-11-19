@@ -3,13 +3,14 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useBlockProps, InnerBlocks, InspectorControls } from '@wordpress/block-editor';
-import { TextControl, PanelBody, RadioControl } from '@wordpress/components';
+import { TextControl, PanelBody, RadioControl, SelectControl, Notice } from '@wordpress/components';
 import { registerBlockType } from '@wordpress/blocks';
 
 /**
  * Block metadata
  */
 registerBlockType('acemedia/login-block', {
+    apiVersion: 3,
     title: __('Login Block', 'acemedia-login-block'),
     icon: 'lock',
     category: 'common',
@@ -85,6 +86,7 @@ registerBlockType('acemedia/login-block', {
             <div {...useBlockProps()}>
                 <InspectorControls>
                     <PanelBody title={__('Login Form Settings', 'acemedia-login-block')}>
+                        <p>{__('Verification follows Settings → Login verification. Add a Verification block to choose its position in this layout.', 'acemedia-login-block')}</p>
                         <RadioControl
                             label={__('Template Type', 'acemedia-login-block')}
                             selected={templateType}
@@ -98,7 +100,7 @@ registerBlockType('acemedia/login-block', {
                 </InspectorControls>
 
                 <form className="wp-block-login-form" method="post">
-                    <InnerBlocks template={selectedTemplate} templateLock="all" />
+                    <InnerBlocks template={selectedTemplate} templateLock={false} />
                 </form>
             </div>
         );
@@ -114,4 +116,26 @@ registerBlockType('acemedia/login-block', {
             </div>
         );
     },
+});
+
+registerBlockType('acemedia/turnstile', {
+    apiVersion: 3,
+    title: __('Verification', 'acemedia-login-block'),
+    icon: 'shield', category: 'widgets',
+    attributes: { step: { type: 'string', default: 'login' } },
+    supports: { html: false, reusable: true },
+    edit: ({ attributes, setAttributes }) => <div {...useBlockProps()}>
+        <InspectorControls><PanelBody title={__('Verification step', 'acemedia-login-block')}>
+            <SelectControl label={__('Show at this step', 'acemedia-login-block')} value={attributes.step}
+                options={[
+                    {label: __('Login', 'acemedia-login-block'), value: 'login'},
+                    {label: __('Two-factor authentication', 'acemedia-login-block'), value: 'two_factor'},
+                    {label: __('Registration', 'acemedia-login-block'), value: 'registration'},
+                    {label: __('Password reset', 'acemedia-login-block'), value: 'password_reset'},
+                    {label: __('Passkey sign-in', 'acemedia-login-block'), value: 'passkey'},
+                ]} onChange={step => setAttributes({step})}/>
+        </PanelBody></InspectorControls>
+        <Notice status="info" isDismissible={false}>{__('Turnstile verification. Enable this step in Settings → Login verification. It appears here when that step is reached.', 'acemedia-login-block')}</Notice>
+    </div>,
+    save: () => null,
 });

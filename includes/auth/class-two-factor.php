@@ -140,6 +140,12 @@ class Two_Factor {
             return $user;
         }
 
+        // Optional human verification runs before either factor can be consumed.
+        if (!empty($_POST['2fa_code']) || !empty($_POST['acemedia_passkey_token'])) {
+            $verification = apply_filters('acemedia_login_second_factor_errors', $user);
+            if (is_wp_error($verification)) return $verification;
+        }
+
         $passkey_token = isset($_POST['acemedia_passkey_token']) ? sanitize_text_field(wp_unslash($_POST['acemedia_passkey_token'])) : '';
         if ($passkey_token && Passkeys::verify_2fa_token($user->ID, $passkey_token)) {
             if (!$requires_passkey_2fa) {
@@ -644,6 +650,8 @@ public function acemedia_add_2fa_to_login_form() {
                 return;
             }
 
+            const verificationFetch = (url, options) => window.AceLoginTurnstile ? window.AceLoginTurnstile.request(url, options, document.getElementById('loginform')) : fetch(url, options);
+            const verificationSubmit = form => window.AceLoginTurnstile ? window.AceLoginTurnstile.submit(form) : form.submit();
             const STATUS_CLASS = 'acemedia-login-status-message';
             let isSubmitting = false;
 
@@ -737,7 +745,7 @@ public function acemedia_add_2fa_to_login_form() {
                         form.appendChild(sessionInput);
                     }
 
-                    fetch(aceLoginBlock.check2FAEndpoint, {
+                    verificationFetch(aceLoginBlock.check2FAEndpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -762,7 +770,7 @@ public function acemedia_add_2fa_to_login_form() {
                         if (data.needs2FASetup && !data.requires2FA) {
                             formInputs.twoFactorState.value = 'setup';
                             formInputs.twoFactorVerified.value = 'true';
-                            form.submit();
+                            verificationSubmit(form);
                         } else if (data.is2FAEnabled) {
                             formInputs.twoFactorState.value = 'verification';
                             formInputs.twoFactorNonce.value = data.nonce;
@@ -770,7 +778,7 @@ public function acemedia_add_2fa_to_login_form() {
                         } else {
                             formInputs.twoFactorState.value = 'disabled';
                             formInputs.twoFactorVerified.value = 'true';
-                            form.submit();
+                            verificationSubmit(form);
                         }
                     })
                     .catch(error => {
@@ -815,6 +823,7 @@ public function acemedia_add_2fa_to_login_form() {
             }
 
             function show2FAPrompt(form, username, formInputs, statusData) {
+                window.AceLoginTurnstile?.activate(form, 'two_factor').catch(error => showMessage(form, error.message));
                 let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
                 if (!twoFAContainer) {
                     const usesPasskeyMethod = !!(statusData && statusData.method === 'passkey');
@@ -902,7 +911,7 @@ public function acemedia_add_2fa_to_login_form() {
                         // The final password login consumes the code exactly once server-side.
                 formInputs.twoFactorVerified.value = 'true';
                 form.dataset.twoFactorVerified = 'true';
-                form.submit();
+                verificationSubmit(form);
                     };
 
                     const loginButton = form.querySelector('#wp-submit');
@@ -935,7 +944,7 @@ public function acemedia_add_2fa_to_login_form() {
                                 formInputs.passkeyToken.value = token;
                                 formInputs.twoFactorVerified.value = 'true';
                                 isSubmitting = true;
-                                form.submit();
+                                verificationSubmit(form);
                         } catch (error) {
                             console.error('Passkey verification failed:', error);
                             const message = (error && (error.userMessage || error.message)) || 'An error occurred while verifying the passkey.';

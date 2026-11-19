@@ -2,7 +2,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof aceLoginBlock === 'undefined') {
         return;
     }
-    const loginForm = document.querySelector('.wp-block-login-form form');
+    for (const loginForm of document.querySelectorAll('.wp-block-login-form form')) {
+    const verificationFetch = (url, options) => window.AceLoginTurnstile ? window.AceLoginTurnstile.request(url, options, loginForm) : fetch(url, options);
+    const verificationSubmit = form => window.AceLoginTurnstile ? window.AceLoginTurnstile.submit(form) : form.submit();
     if (loginForm) {
         loginForm.action = aceLoginBlock.loginUrl;
         let redirectInput = loginForm.querySelector('input[name="redirect_to"]');
@@ -24,7 +26,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Handle login button click
-    const loginButton = document.querySelector('.wp-block-login-form form .wp-block-button__link, .wp-block-acemedia-login-block form .wp-block-button__link');
+    const loginButton = loginForm.querySelector('.wp-block-button__link');
     if (loginButton) {
         loginButton.addEventListener('click', handleLoginAttempt);
     }
@@ -137,7 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
             throw new Error('Passkey endpoints are not configured.');
         }
 
-        const optionsResponse = await fetch(aceLoginBlock.passkeyLoginOptionsEndpoint, {
+        const optionsResponse = await verificationFetch(aceLoginBlock.passkeyLoginOptionsEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -247,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
     
             // Check if 2FA is enabled for the user
-            fetch(aceLoginBlock.check2FAEndpoint, {
+            verificationFetch(aceLoginBlock.check2FAEndpoint, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -272,7 +274,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (data.needs2FASetup && !data.requires2FA) {
                     formInputs.twoFactorState.value = 'setup';
                     formInputs.twoFactorVerified.value = 'true';
-                    form.submit();
+                    verificationSubmit(form);
                 } else if (data.is2FAEnabled) {
                     formInputs.twoFactorState.value = 'verification';
                     formInputs.twoFactorNonce.value = data.nonce;
@@ -280,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 } else {
                     formInputs.twoFactorState.value = 'disabled';
                     formInputs.twoFactorVerified.value = 'true';
-                    form.submit();
+                    verificationSubmit(form);
                 }
             })
             .catch(error => {
@@ -323,6 +325,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function show2FAPrompt(form, username, formInputs, statusData) {
+        window.AceLoginTurnstile?.activate(form, 'two_factor').catch(error => showMessage(form, error.message));
         let twoFAContainer = form.querySelector('.wp-block-acemedia-2fa-block');
         if (!twoFAContainer) {
             const requiresPasskeyByRole = !!(statusData && statusData.requiresPasskey2FA);
@@ -413,7 +416,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // The final password login consumes the code exactly once server-side.
                 formInputs.twoFactorVerified.value = 'true';
                 form.dataset.twoFactorVerified = 'true';
-                form.submit();
+                verificationSubmit(form);
             };
     
             // Replace verify button click handler with login button handler:
@@ -440,7 +443,7 @@ loginButton.addEventListener('click', (e) => {
 
                         formInputs.passkeyToken.value = token;
                         formInputs.twoFactorVerified.value = 'true';
-                        form.submit();
+                        verificationSubmit(form);
                     } catch (error) {
                         const message = (error && (error.userMessage || error.message)) || 'An error occurred while verifying the passkey.';
                         showMessage(form, message);
@@ -458,5 +461,6 @@ loginButton.addEventListener('click', (e) => {
                 }
             });
         }
+    }
     }
 });

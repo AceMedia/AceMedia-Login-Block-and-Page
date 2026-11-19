@@ -297,7 +297,9 @@ class Passkeys {
                         throw makeError(msg, 'missing_username');
                     }
 
-                    const optionsResponse = await fetch(passkeyLoginOptionsEndpoint, {
+                    const verificationFetch = (url, requestOptions) => window.AceLoginTurnstile ? window.AceLoginTurnstile.request(url, requestOptions, form) : fetch(url, requestOptions);
+                    if (silent && window.aceLoginVerification?.steps.includes('passkey')) throw makeError('Verification requires an explicit login attempt.', 'verification_required');
+                    const optionsResponse = await verificationFetch(passkeyLoginOptionsEndpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

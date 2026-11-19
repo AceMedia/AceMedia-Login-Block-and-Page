@@ -1,7 +1,7 @@
 <?php
 /** Isolated regression tests, invented accounts and credentials; no network/database. */
 namespace AceLoginBlock\Utils { class Logging { public static function log_event(...$args) {} } }
-namespace AceLoginBlock\Auth { class Passkeys { public static function is_verified_passwordless_user($id) { return false; } public static function inspect_password_token($token,$username) { return $token === 'valid-fixture-token' ? $GLOBALS['user'] : false; } } }
+namespace AceLoginBlock\Auth { class Login_Lockout { const ERROR_CODE = 'acemedia_login_locked'; } class Passkeys { public static function is_verified_passwordless_user($id) { return false; } public static function inspect_password_token($token,$username) { return $token === 'valid-fixture-token' ? $GLOBALS['user'] : false; } } }
 namespace {
 define('COOKIEHASH', 'fixture'); define('ABSPATH', __DIR__); define('DAY_IN_SECONDS',86400); define('HOUR_IN_SECONDS',3600); define('MINUTE_IN_SECONDS',60);
 function add_action(...$a) {}
@@ -30,7 +30,7 @@ function check_ajax_referer(...$args){} function get_current_user_id(){return 1;
 function wp_send_json_error($value,...$args){throw new RuntimeException('json-error');}
 function wp_send_json_success($value,...$args){throw new RuntimeException('json-success');}
 class WP_User {public $ID=1;public $roles=['subscriber'];public $user_email='fiction@example.invalid';}
-class WP_Error {public $code;public $errors=[]; function __construct($c='',...$a){$this->code=$c;} function add($code,$message){$this->errors[$code]=$message;} function has_errors(){return !empty($this->errors);}}
+class WP_Error {public $code;public $errors=[]; function __construct($c='',...$a){$this->code=$c;} function add($code,$message){$this->errors[$code]=$message;} function has_errors(){return !empty($this->errors);} function get_error_codes(){return array_merge($this->code ? [$this->code] : [], array_keys($this->errors));} function get_error_message($code=''){return $this->errors[$code]??$this->code;}}
 class WP_REST_Request {private $p=[];function __construct(...$a){} function set_param($k,$v){$this->p[$k]=$v;} function get_param($k){return $this->p[$k]??null;}}
 function expect($ok,$label){if(!$ok)throw new \Exception($label);echo "PASS: $label\n";}
 class Fixture_DB {
