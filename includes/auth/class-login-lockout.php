@@ -379,7 +379,7 @@ class Login_Lockout {
         $page = max(1, (int) ($args['page'] ?? 1));
         $where_sql = implode(' AND ', $where);
 
-        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- Table comes from table_name(), WHERE uses fixed fragments, and every user value is passed to prepare().
         $count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
         $total = (int) $wpdb->get_var($params ? $wpdb->prepare($count_sql, $params) : $count_sql);
 
@@ -570,14 +570,21 @@ class Login_Lockout {
         );
 
         $lines = [
+            /* translators: %s: site URL. */
             sprintf(__('A login lockout was triggered on %s.', 'acemedia-login-block'), home_url()),
             '',
+            /* translators: %s: comma-separated lock types. */
             sprintf(__('Locked: %s', 'acemedia-login-block'), implode(', ', $types)),
+            /* translators: %s: attempted username. */
             sprintf(__('Username tried: %s', 'acemedia-login-block'), $username !== '' ? $username : '-'),
+            /* translators: %s: IP address. */
             sprintf(__('IP address: %s', 'acemedia-login-block'), $ip ?: '-'),
+            /* translators: %d: failed attempt count. */
             sprintf(__('Failed attempts: %d', 'acemedia-login-block'), $count),
+            /* translators: %s: localised expiry date and time. */
             sprintf(__('Locked until: %s', 'acemedia-login-block'), wp_date(get_option('date_format') . ' ' . get_option('time_format'), $locked_until)),
             '',
+            /* translators: %s: security settings URL. */
             sprintf(__('Review or unlock: %s', 'acemedia-login-block'), admin_url('options-general.php?page=acemedia-login-block&tab=security')),
             '',
             __('You can turn these emails off in the Ace Login Block settings.', 'acemedia-login-block'),

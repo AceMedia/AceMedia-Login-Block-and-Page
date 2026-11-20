@@ -3,7 +3,6 @@
  * Plugin Name:       Ace Login Block
  * Description:       A block to replace the WordPress login page using a custom page and its template from the site editor.
  * Requires at least: 6.6
- * Tested up to:      7.1
  * Requires PHP:      8.2
  * Version:           0.432.1
  * Author:            Shane Rounce

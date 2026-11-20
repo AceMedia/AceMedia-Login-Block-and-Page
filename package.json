@@ -3,7 +3,7 @@
 	"version": "0.432.1",
 	"description": "Ace Login Block for adding a login form as a WordPress block.",
 	"author": "Shane Rounce",
-	"license": "UNLICENSED",
+	"license": "GPL-2.0-or-later",
 	"main": "build/login-block.js",
 	"scripts": {
 		"build": "wp-scripts build",

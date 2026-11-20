@@ -82,6 +82,7 @@ final class Turnstile {
         if (!is_string($token) || '' === $token || strlen($token) > 2048) return self::error('missing', __('Please complete the security check and try again.', 'acemedia-login-block'));
         $cache = hash('sha256', get_current_blog_id() . ':' . $s['site_key'] . ':' . $step . ':' . $token);
         if (array_key_exists($cache, self::$verified)) return self::$verified[$cache];
+        // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Optional Turnstile verification API, disclosed in readme; not an offloaded plugin asset.
         $res = wp_remote_post('https://challenges.cloudflare.com/turnstile/v0/siteverify', ['timeout' => 8, 'body' => ['secret' => $s['secret'], 'response' => $token]]);
         if (is_wp_error($res) || 200 !== wp_remote_retrieve_response_code($res)) return self::error('unavailable', __('Verification is temporarily unavailable. Please try again.', 'acemedia-login-block'), 503);
         $data = json_decode(wp_remote_retrieve_body($res), true);
@@ -134,12 +135,18 @@ final class Turnstile {
 
     public static function login_fields() {
         echo self::widget('login'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped markup.
-        echo self::widget('passkey', true);
+        echo self::widget('passkey', true); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- widget() escapes each attribute in its generated markup.
         echo self::widget('two_factor', true); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     }
     private static function guard_owns_registration() { return class_exists('ARG_Turnstile') && \ARG_Turnstile::enabled(); }
-    public static function registration_fields() { if (!self::guard_owns_registration()) echo self::widget('registration'); }
-    public static function recovery_fields() { echo self::widget('password_reset'); }
+    public static function registration_fields() {
+        if (!self::guard_owns_registration()) {
+            echo self::widget('registration'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- widget() escapes each attribute in its generated markup.
+        }
+    }
+    public static function recovery_fields() {
+        echo self::widget('password_reset'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- widget() escapes each attribute in its generated markup.
+    }
     private static function posted($field) { return isset($_POST[$field]) && is_string($_POST[$field]) ? wp_unslash($_POST[$field]) : ''; }
     private static function context($username, $password, $passkey = '') { return hash_hmac('sha256', wp_json_encode([strtolower(sanitize_user(trim((string) $username))), trim((string) $password), (string) $passkey]), wp_salt('auth')); }
 

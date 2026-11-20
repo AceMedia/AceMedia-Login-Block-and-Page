@@ -4,7 +4,7 @@ Tags: login, passkeys, two-factor, security, custom login
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.431.0
+Stable tag: 0.432.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -31,6 +31,7 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 * Remembered devices that skip 2FA only (password still required).
 * Login lockout after repeated failed attempts. By default, 5 failures within 15 minutes locks the account for 30 minutes. Repeated failures from one IP address, or against a username that does not exist, are limited too.
 * A Security tab with a log of failed and blocked logins, filters, one-click unlocking and an optional email when a lockout happens.
+* Optional Cloudflare Turnstile checks for login, second-factor verification, registration, password recovery and passkey requests, with per-step controls and a multisite network policy.
 * Passkey policy settings: RP ID override, attestation preference, and per-role passwordless control.
 
 *Security:*
@@ -43,6 +44,16 @@ Ace Login Block allows you to replace the default WordPress login page with a cu
 * If a factor an account depends on cannot be used, that account is refused with a clear message. The policy is never quietly dropped.
 
 Ace Login Block provides a seamless way to craft unique, branded login experiences while ensuring compatibility with WordPress’s login handling.
+
+== External services ==
+
+Cloudflare Turnstile is optional and disabled until an administrator selects protected steps and configures verification keys in Settings > Login verification. Network administrators can also enforce a shared policy. Keys from Ace Registration Guard or Adaptive Content Enhancer can be reused when configured.
+
+On protected forms, the visitor's browser loads Cloudflare's Turnstile script from `challenges.cloudflare.com` and sends browser and network information to Cloudflare to complete the check. The site sends the resulting token and the configured secret key to Cloudflare's Siteverify endpoint. Login passwords and second-factor codes are not sent to Cloudflare by this plugin. An enabled check blocks the protected action if verification cannot complete.
+
+Service details: https://www.cloudflare.com/products/turnstile/
+Terms: https://www.cloudflare.com/website-terms/
+Privacy: https://www.cloudflare.com/privacypolicy/
 
 == Installation ==
 
@@ -97,6 +108,13 @@ Yes. Passkeys require a secure context (HTTPS or `http://localhost`).
 7. Passkeys and two-factor options on a user's profile.
 
 == Changelog ==
+
+= 0.432.1 =
+Release Date: 2026-11-20
+* Add optional Cloudflare Turnstile checks for individual authentication steps, including login, second-factor verification, registration, password recovery and passkey requests.
+* Support core, block and WooCommerce forms, with single-use login receipts and hostname and action checks.
+* Add site and multisite network verification settings, with shared-key support and registration integration to avoid duplicate signup challenges.
+* Include the verification browser script in release packages and document the optional external service.
 
 = 0.431.0 =
 Release Date: 2026-10-22
